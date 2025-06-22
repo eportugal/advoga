@@ -1,6 +1,8 @@
+// app/layout.tsx (NÃO USE "use client" aqui!)
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./app.css";
+import ClientLayout from "./ClientLayout"; // novo wrapper
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,7 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body>
+        <ClientLayout>{children}</ClientLayout>
+      </body>
     </html>
   );
 }

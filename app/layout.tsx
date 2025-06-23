@@ -1,13 +1,11 @@
-"use client";
+// app/layout.tsx
 
-import React from "react";
-import { Amplify } from "aws-amplify";
-import "./app.css";
-import { Authenticator } from "@aws-amplify/ui-react";
-import "@aws-amplify/ui-react/styles.css";
-import outputs from "@/amplify_outputs.json";
-
-Amplify.configure(outputs);
+import "./globals.css";
+import "./utils/amplify-config"; // garante que configure é chamado 1x
+import { ProvideAuth } from "./contexts/ProvideAuth";
+import { ProvideProfile } from "./contexts/ProvideProfile";
+import NavBar from "./components/NavBar";
+import Footer from "./components/Footer";
 
 export default function RootLayout({
   children,
@@ -15,9 +13,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <body>
-        <Authenticator>{children}</Authenticator>
+        <ProvideAuth>
+          <ProvideProfile>
+            <NavBar />
+            <main>{children}</main>
+            <Footer />
+          </ProvideProfile>
+        </ProvideAuth>
       </body>
     </html>
   );

@@ -1,0 +1,23 @@
+backend:
+  data:
+    schema: |
+      type User @model {
+        id: ID!
+        name: String!
+        email: String!
+        role: String! # "lawyer" or "client"
+      }
+
+      type Question @model {
+        id: ID!
+        content: String!
+        author: User @hasOne
+        createdAt: AWSDateTime
+      }
+
+      type Call @model {
+        id: ID!
+        date: AWSDateTime!
+        lawyer: User @hasOne
+        client: User @hasOne
+      }

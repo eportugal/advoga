@@ -1,20 +1,33 @@
 "use client";
-import type { Schema } from "@/amplify/data/resource";
-import { useAuthenticator } from "@aws-amplify/ui-react";
-import { useState, useEffect } from "react";
-import { generateClient } from "aws-amplify/data";
+import { useEffect } from "react";
+import { useProvideAuth } from "./contexts/ProvideAuth";
+import { useProfile } from "./contexts/ProvideProfile";
+import { useRouter } from "next/navigation";
 
-const client = generateClient<Schema>();
+export default function LandingPage() {
+  const { user, loading } = useProvideAuth();
+  const { profile, refreshProfile } = useProfile();
+  const router = useRouter();
 
-export default function HomePage() {
-  const { signOut } = useAuthenticator();
+  useEffect(() => {
+    if (!loading && user) {
+      refreshProfile(); // força pegar papel atualizado
+    }
+  }, [user, loading]);
 
-  // ...
+  useEffect(() => {
+    if (profile?.role === "regular") {
+      router.replace("/tickets/create");
+    }
+    if (profile?.role === "lawyer") {
+      router.replace("/tickets/manage");
+    }
+  }, [profile]);
 
   return (
-    <main>
-      {/* ... */}
-      <button onClick={signOut}>Sign out</button>
-    </main>
+    <div className="flex flex-col items-center justify-center h-screen">
+      <h1>Bem-vindo ao Advogare</h1>
+      <p>Você será direcionado para sua área...</p>
+    </div>
   );
 }

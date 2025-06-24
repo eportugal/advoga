@@ -8,7 +8,6 @@ import { useAuth } from "@/app/hooks/useAuth";
 export default function LoginPage() {
   const { isAuthenticated, signIn, isLoading } = useAuth();
   const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -38,7 +37,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-  if (isAuthenticated) return null; // se já logado → não mostra form
   if (isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">

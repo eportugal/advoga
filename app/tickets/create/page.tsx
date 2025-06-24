@@ -3,18 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useRouter } from "next/navigation";
-
-// Tipo do ticket
-type Ticket = {
-  ticketId: string;
-  subject: string;
-  text: string;
-  status: string;
-  reply?: string;
-  lawyerName?: string; // ✅ NOVO!
-  createdAt: string;
-  respondedAt?: string;
-};
+import type { Ticket } from "@/app/types/Ticket";
 
 function Accordion({
   reply,
@@ -62,36 +51,14 @@ function timeAgo(dateString: string) {
 }
 
 export default function CreateTicketPage() {
-  const { user, isAuthenticated, profile } = useAuth();
+  const { isAuthenticated, profile, dbUser } = useAuth(); // ✅ usa dbUser direto
   const router = useRouter();
 
-  const [dbUserId, setDbUserId] = useState<string | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [subject, setSubject] = useState("");
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // 🔑 Pega o userId do DynamoDB
-  useEffect(() => {
-    const loadDbUser = async () => {
-      if (!user) return;
-      const email = user.signInDetails?.loginId;
-      if (!email) return;
-
-      const res = await fetch("/api/get-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (data.success && data.user) {
-        setDbUserId(data.user.id);
-      }
-    };
-
-    loadDbUser();
-  }, [user]);
 
   // Proteger rota
   useEffect(() => {
@@ -114,12 +81,12 @@ export default function CreateTicketPage() {
     }
   };
 
-  // Recarregar quando dbUserId for conhecido
+  // Recarregar quando dbUser mudar
   useEffect(() => {
-    if (dbUserId) {
-      fetchTickets(dbUserId);
+    if (dbUser?.id) {
+      fetchTickets(dbUser.id);
     }
-  }, [dbUserId]);
+  }, [dbUser]);
 
   // Criar ticket
   const handleCreate = async () => {
@@ -128,7 +95,7 @@ export default function CreateTicketPage() {
       return;
     }
 
-    if (!dbUserId) {
+    if (!dbUser?.id) {
       setError("ID do usuário não encontrado.");
       return;
     }
@@ -141,7 +108,7 @@ export default function CreateTicketPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: dbUserId,
+          userId: dbUser.id, // ✅ usa do auth
           subject: subject.trim(),
           text: text.trim(),
         }),
@@ -154,7 +121,7 @@ export default function CreateTicketPage() {
       setText("");
 
       // Recarregar lista
-      await fetchTickets(dbUserId);
+      await fetchTickets(dbUser.id);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Erro inesperado");

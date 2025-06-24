@@ -32,6 +32,12 @@ export default function LandingPage() {
     }
   }, [isAuthenticated, dbUser, isLoading, router]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/"); // já logado → home
+    }
+  }, [isAuthenticated, isLoading, router]);
+
   const handleCTA = () => {
     router.push("/signup/regular");
   };

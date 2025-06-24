@@ -4,18 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import TicketModal from "../../components/TicketModal";
-
-type Ticket = {
-  ticketId: string;
-  user: {
-    name: string;
-    email: string;
-  } | null;
-  subject: string;
-  text: string;
-  status: string;
-  createdAt: string;
-};
+import type { Ticket } from "@/app/types/Ticket";
 
 function timeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -34,16 +23,39 @@ function timeAgo(dateString: string) {
 
 export default function TicketsManagePage() {
   const router = useRouter();
-  const { isAuthenticated, profile } = useAuth();
+  const { isAuthenticated, profile, user } = useAuth(); // ✅ só usa user
+  const [dbUserId, setDbUserId] = useState<string | null>(null); // ✅ id local
+
   const [lastKey, setLastKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showReplyField, setShowReplyField] = useState(false);
   const [replyText, setReplyText] = useState("");
 
+  // ✅ Igual ao seu padrão
+  useEffect(() => {
+    const loadDbUser = async () => {
+      if (!user) return;
+      const email = user.signInDetails?.loginId;
+      if (!email) return;
+
+      const res = await fetch("/api/get-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setDbUserId(data.user.id);
+      }
+    };
+
+    loadDbUser();
+  }, [user]);
+
+  // Protege rota e carrega tickets
   useEffect(() => {
     if (!isAuthenticated) return;
     if (profile !== "advogado") {
@@ -90,6 +102,13 @@ export default function TicketsManagePage() {
       return;
     }
 
+    if (!dbUserId) {
+      alert("Informações do advogado não encontradas.");
+      return;
+    }
+
+    console.log("[DEBUG] Enviando reply com ID:", dbUserId);
+
     try {
       const res = await fetch("/api/respond-ticket", {
         method: "POST",
@@ -97,6 +116,7 @@ export default function TicketsManagePage() {
         body: JSON.stringify({
           ticketId: selectedTicket?.ticketId,
           reply: replyText,
+          lawyerId: dbUserId, // ✅ usa id local
         }),
       });
 
@@ -106,7 +126,7 @@ export default function TicketsManagePage() {
         setReplyText("");
         setShowReplyField(false);
       } else {
-        alert("Falha ao enviar resposta.");
+        alert(data.error || "Falha ao enviar resposta.");
       }
     } catch (err) {
       console.error(err);

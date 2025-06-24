@@ -8,31 +8,11 @@ import { useEffect, useState } from "react";
 
 export default function NavBar() {
   const router = useRouter();
-  const { isAuthenticated, profile, isLoading, signOut, user } = useAuth();
+  const { isAuthenticated, dbUser, isLoading, profile, signOut } = useAuth();
   const [fullName, setFullName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!user?.signInDetails?.loginId) return;
-
-      try {
-        const res = await fetch("/api/get-user", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: user.signInDetails.loginId }),
-        });
-        const data = await res.json();
-        if (data.success && data.user) {
-          setFullName(`${data.user.firstName} ${data.user.lastName}`);
-        }
-      } catch (err) {
-        console.error("Erro ao carregar nome do usuário:", err);
-      }
-    };
-
-    fetchUser();
-  }, [user]);
-
+  const userName = dbUser
+    ? `${dbUser.firstName || ""} ${dbUser.lastName || ""}`.trim()
+    : "";
   const handleSignOut = async () => {
     await signOut();
     router.push("/");
@@ -68,7 +48,7 @@ export default function NavBar() {
           {isAuthenticated ? (
             <div className="flex items-center space-x-2">
               <span className="text-gray-600">
-                Bem-vindo, {fullName || "Usuário"}
+                Bem-vindo(a), {userName || "Usuário"}
               </span>
               <button
                 onClick={handleSignOut}

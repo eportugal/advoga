@@ -2,12 +2,21 @@
 
 import React from "react";
 
+// IMPORTA O MESMO TIPO Ticket:
+type Ticket = {
+  ticketId: string;
+  user: {
+    name: string;
+    email: string;
+  } | null;
+  subject: string;
+  text: string;
+  status: string;
+  createdAt: string;
+};
+
 type TicketModalProps = {
-  ticket: {
-    subject: string;
-    text: string;
-    status: string;
-  };
+  ticket: Ticket; // <- Agora o mesmo tipo!
   replyText: string;
   showReplyField: boolean;
   onClose: () => void;
@@ -30,7 +39,6 @@ export default function TicketModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-end z-50">
       <div className="w-full max-w-md bg-white shadow-lg p-6 flex flex-col relative">
-        {/* Botão X */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-600 hover:text-gray-900 text-xl"

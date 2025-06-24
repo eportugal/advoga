@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  QueryCommand,
+  GetItemCommand,
+} from "@aws-sdk/client-dynamodb";
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION,
@@ -43,16 +47,39 @@ export async function GET(req: NextRequest) {
 
     const res = await client.send(new QueryCommand(input));
 
-    const tickets =
-      res.Items?.map((item) => ({
-        ticketId: item.ticketId?.S ?? null,
-        userId: item.userId?.S ?? null,
-        subject: item.subject?.S ?? "",
-        text: item.text?.S ?? "",
-        status: item.status?.S ?? "Novo",
-        createdAt: item.createdAt?.S ?? null,
-        reply: item.reply?.S ?? null,
-      })) || [];
+    // ✅ Monta cada ticket com lookup do lawyerName se existir
+    const tickets = await Promise.all(
+      (res.Items || []).map(async (item) => {
+        let lawyerName = null;
+
+        if (item.lawyerId?.S) {
+          const lawyerRes = await client.send(
+            new GetItemCommand({
+              TableName: "users",
+              Key: { id: { S: item.lawyerId.S } },
+            })
+          );
+
+          if (lawyerRes.Item) {
+            lawyerName = `${lawyerRes.Item.firstName?.S ?? ""} ${
+              lawyerRes.Item.lastName?.S ?? ""
+            }`.trim();
+          }
+        }
+
+        return {
+          ticketId: item.ticketId?.S ?? null,
+          userId: item.userId?.S ?? null,
+          subject: item.subject?.S ?? "",
+          text: item.text?.S ?? "",
+          status: item.status?.S ?? "Novo",
+          createdAt: item.createdAt?.S ?? null,
+          reply: item.reply?.S ?? null,
+          respondedAt: item.respondedAt?.S ?? null,
+          lawyerName: lawyerName || null, // ✅ incluído!
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,

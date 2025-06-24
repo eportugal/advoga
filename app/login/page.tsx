@@ -39,6 +39,13 @@ export default function LoginPage() {
     }
   };
   if (isAuthenticated) return null; // se já logado → não mostra form
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-20 w-20 border-t-4 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <>

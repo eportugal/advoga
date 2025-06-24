@@ -1,44 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Amplify } from "aws-amplify";
-import outputs from "@/amplify_outputs.json";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../hooks/useAuth"; // ✅ Hook público certo
-
-Amplify.configure(outputs);
+import { useAuth } from "@/app/hooks/useAuth";
 
 export default function LoginPage() {
+  const { isAuthenticated, signIn, isLoading } = useAuth();
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-  const { signIn } = useAuth(); // ✅ Usar apenas o método do contexto!
+  // ✅ 1️⃣ Redireciona se já estiver logado
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/"); // já logado → home
+    }
+  }, [isAuthenticated, isLoading, router]);
 
+  // ✅ 2️⃣ Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
-      // 1️⃣ Usa signIn do contexto — já atualiza tudo
       const res = await signIn(email, password);
-
-      if (res.success) {
-        router.push("/");
-      } else {
-        setError(res.message || "Login failed");
+      if (!res.success) {
+        throw new Error(res.message || "Login falhou");
       }
+      router.push("/"); // login OK → home
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Login failed");
+      setError(err.message || "Erro inesperado");
     } finally {
       setLoading(false);
     }
   };
+  if (isAuthenticated) return null; // se já logado → não mostra form
 
   return (
     <>
@@ -48,11 +48,13 @@ export default function LoginPage() {
       >
         Voltar
       </Link>
+
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="w-full max-w-md bg-white shadow-md rounded-lg p-8">
           <h1 className="text-2xl font-bold mb-6 text-center text-black">
             Login
           </h1>
+
           <form onSubmit={handleLogin} className="space-y-4">
             <input
               type="email"
@@ -70,7 +72,9 @@ export default function LoginPage() {
               required
               className="w-full border border-gray-300 rounded px-4 py-2"
             />
+
             {error && <p className="text-red-500 text-sm">{error}</p>}
+
             <button
               type="submit"
               disabled={loading}

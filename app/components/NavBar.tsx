@@ -4,36 +4,49 @@ import Link from "next/link";
 import { useAuth } from "../hooks/useAuth";
 import { Scale, LogOut, User } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function NavBar() {
   const router = useRouter();
-  const { user, signOut, isAuthenticated, profile, isLoading } = useAuth();
+  const { isAuthenticated, profile, isLoading, signOut, user } = useAuth();
+  const [fullName, setFullName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (!user?.signInDetails?.loginId) return;
+
+      try {
+        const res = await fetch("/api/get-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: user.signInDetails.loginId }),
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          setFullName(`${data.user.firstName} ${data.user.lastName}`);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar nome do usuário:", err);
+      }
+    };
+
+    fetchUser();
+  }, [user]);
 
   const handleSignOut = async () => {
     await signOut();
     router.push("/");
   };
 
-  if (isLoading) {
-    return (
-      <nav className="bg-white shadow-lg border-b border-gray-200 p-4">
-        Verificando sessão...
-      </nav>
-    );
-  }
-
   return (
     <nav className="fixed top-0 left-0 right-0 bg-white shadow-lg z-50 border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
-        {/* Logo */}
         <Link href="/" className="flex items-center space-x-2">
           <Scale className="h-8 w-8 text-blue-600" />
-          <span className="text-xl font-bold text-gray-900">Advogare</span>
+          <span className="text-xl font-bold text-gray-900">Advoga</span>
         </Link>
 
-        {/* Menu à direita */}
         <div className="flex items-center space-x-4">
-          {/* ✅ Mostra link se for advogado */}
           {profile === "advogado" && (
             <Link
               href="/tickets/manage"
@@ -43,15 +56,27 @@ export default function NavBar() {
             </Link>
           )}
 
-          {isAuthenticated ? (
-            <button
-              onClick={handleSignOut}
-              className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+          {isAuthenticated && profile === "regular" && (
+            <Link
+              href="/tickets/create"
+              className="bg-blue-600 text-white px-4 py-2 rounded"
             >
-              <User className="h-5 w-5" />
-              <span>Sair</span>
-              <LogOut className="h-5 w-5" />
-            </button>
+              Abrir Chamado
+            </Link>
+          )}
+
+          {isAuthenticated ? (
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-600">
+                Bem-vindo, {fullName || "Usuário"}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
+            </div>
           ) : (
             <Link
               href="/login"

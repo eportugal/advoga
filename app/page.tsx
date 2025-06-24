@@ -1,35 +1,39 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useAuth } from "./hooks/useAuth"; // ✅ Hook público correto!
+import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { CheckCircle, Sparkles, Send, MessageCircle } from "lucide-react";
-import NavBar from "./components/NavBar"; // Ajuste caminho conforme estrutura
+import NavBar from "./components/NavBar";
+import Link from "next/link";
+import { Scale, LogOut, User } from "lucide-react";
 
 export default function LandingPage() {
   const router = useRouter();
-  const { isAuthenticated, profile, isLoading } = useAuth();
-
+  const { isAuthenticated, dbUser, isLoading, profile, signOut } = useAuth();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [loadingAnswer, setLoadingAnswer] = useState(false);
   const [success, setSuccess] = useState(false);
+  const fullName =
+    dbUser?.firstName && dbUser?.lastName
+      ? `${dbUser.firstName} ${dbUser.lastName}`
+      : "Usuário";
 
-  // ✅ Redireciona se logado e tiver profile
+  // ✅ Redireciona usando dbUser
   useEffect(() => {
-    if (!isLoading && isAuthenticated && profile) {
-      if (profile === "regular") {
-        router.replace("/tickets/create");
-      } else if (profile === "advogado") {
+    if (!isLoading && isAuthenticated && dbUser) {
+      if (dbUser.role === "regular") {
+        router.replace("/");
+      } else if (dbUser.role === "advogado") {
         router.replace("/tickets/manage");
       }
     }
-  }, [isAuthenticated, profile, isLoading, router]);
+  }, [isAuthenticated, dbUser, isLoading, router]);
 
-  // ✅ Botão CTA vai para /signup se não logado
   const handleCTA = () => {
-    router.push("/signup");
+    router.push("/signup/regular");
   };
 
   const handleSubmit = async () => {
@@ -57,13 +61,17 @@ export default function LandingPage() {
         const chunk = decoder.decode(value);
         setAnswer((prev) => prev + chunk);
       }
-
       setSuccess(true);
     } catch (err) {
       console.error("Erro:", err);
     } finally {
       setLoadingAnswer(false);
     }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/");
   };
 
   return (

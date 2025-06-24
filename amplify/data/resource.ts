@@ -7,7 +7,7 @@ const schema = a.schema({
       firstName: a.string().required(),
       lastName: a.string().required(),
       email: a.email().required(),
-      status: a.enum(["pending", "confirmed", "suspended"]).default("pending"),
+      status: a.enum(["pending", "confirmed", "suspended"]),
       createdAt: a.datetime(),
       updatedAt: a.datetime(),
       // Campos opcionais para mais informações

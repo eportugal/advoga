@@ -19,7 +19,7 @@ export default function Footer() {
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <Link
-              href="/signup-lawyer"
+              href="/signup/lawyer"
               className="inline-block bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold px-6 py-3 rounded-full hover:from-blue-600 hover:to-purple-700 transition duration-300"
             >
               📜 Quero Me Cadastrar Como Advogado

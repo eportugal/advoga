@@ -22,6 +22,7 @@ export interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   user: AuthUser | null;
+  dbUser: any | null; // ✅ Novo!
   profile: "regular" | "advogado" | null;
   signUp: (...args: any[]) => Promise<any>;
   confirmSignUp: (...args: any[]) => Promise<any>;
@@ -31,6 +32,7 @@ export interface AuthContextType {
   currentSession: () => Promise<any>;
   signIn: (...args: any[]) => Promise<any>;
   signOut: () => Promise<any>;
+  refreshProfile: () => Promise<void>; // ✅ Novo!
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(
@@ -46,6 +48,7 @@ function useProvideAuth(): AuthContextType {
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [dbUser, setDbUser] = useState<any | null>(null); // ✅ Novo!
   const [profile, setProfile] = useState<"regular" | "advogado" | null>(null);
 
   useEffect(() => {
@@ -62,11 +65,35 @@ function useProvideAuth(): AuthContextType {
           session.tokens?.idToken?.payload["custom:profile_type"];
         setProfile(profileType as "regular" | "advogado");
         setIsAuthenticated(true);
+
+        // ✅ Já carrega info do banco só 1x:
+        await refreshProfile();
       }
     } catch {
       setIsAuthenticated(false);
       setUser(null);
       setProfile(null);
+      setDbUser(null);
+    }
+  };
+
+  const refreshProfile = async () => {
+    try {
+      if (!user?.signInDetails?.loginId) return;
+      const res = await fetch("/api/get-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.signInDetails.loginId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDbUser(data.user);
+      } else {
+        setDbUser(null);
+      }
+    } catch (err) {
+      console.error("[refreshProfile] Erro:", err);
+      setDbUser(null);
     }
   };
 
@@ -82,6 +109,7 @@ function useProvideAuth(): AuthContextType {
       setIsAuthenticated(false);
       setUser(null);
       setProfile(null);
+      setDbUser(null);
       await amplifySignOut();
       return { success: false };
     }
@@ -186,6 +214,10 @@ function useProvideAuth(): AuthContextType {
       setUser(currentUser);
       setProfile(profileType as "regular" | "advogado");
       setIsAuthenticated(true);
+
+      // ✅ Quando logar, atualiza banco também:
+      await refreshProfile();
+
       return { success: true, profile: profileType };
     } catch (error: any) {
       return { success: false, message: error.message };
@@ -200,6 +232,7 @@ function useProvideAuth(): AuthContextType {
       setIsAuthenticated(false);
       setUser(null);
       setProfile(null);
+      setDbUser(null);
       return { success: true };
     } catch (error: any) {
       return { success: false, message: error.message };
@@ -210,6 +243,7 @@ function useProvideAuth(): AuthContextType {
     isLoading,
     isAuthenticated,
     user,
+    dbUser, // ✅ Disponível para todos os componentes
     profile,
     signUp,
     confirmSignUp,
@@ -219,5 +253,6 @@ function useProvideAuth(): AuthContextType {
     currentSession,
     signIn,
     signOut: handleSignOut,
+    refreshProfile, // ✅ exposto
   };
 }

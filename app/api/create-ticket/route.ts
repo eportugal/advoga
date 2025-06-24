@@ -1,4 +1,4 @@
-// app/api/create-ticket/route.ts
+// ✅ app/api/create-ticket/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import {
   DynamoDBClient,
@@ -16,33 +16,17 @@ const client = new DynamoDBClient({
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, text, subject } = await req.json();
+    // ✅ Recebe direto o ID do user, subject e text
+    const { userId, subject, text } = await req.json();
 
-    if (!email || !text?.trim()) {
+    if (!userId || !subject?.trim() || !text?.trim()) {
       return NextResponse.json(
-        { success: false, error: "Insira sua dúvida." },
+        { success: false, error: "Preencha todos os campos." },
         { status: 400 }
       );
     }
 
-    // ✅ USE URL COMPLETA com fallback local
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-    const res = await fetch(`${baseUrl}/api/get-user`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-
-    const { user } = await res.json();
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "Usuário não encontrado." },
-        { status: 404 }
-      );
-    }
-
-    // ✅ Cria ID incremental
+    // ✅ Gera ID incremental usando a tabela counters
     const counter = await client.send(
       new UpdateItemCommand({
         TableName: "counters",
@@ -60,19 +44,17 @@ export async function POST(req: NextRequest) {
     const newId = counter.Attributes!.currentValue.N;
     if (!newId) throw new Error("Falha ao gerar ID do ticket");
 
-    // ✅ Cria ticket no DynamoDB
+    // ✅ Cria ticket com tipo "ticket"
     await client.send(
       new PutItemCommand({
         TableName: "tickets",
         Item: {
           ticketId: { S: newId },
-          userId: { S: user.id },
-          userEmail: { S: user.email },
-          userName: { S: `${user.firstName} ${user.lastName}` },
-          role: { S: user.role },
-          subject: { S: subject.trim() }, // 🆕 assunto
-          text: { S: text.trim() }, // 🆕 texto
+          userId: { S: userId },
+          subject: { S: subject.trim() },
+          text: { S: text.trim() },
           status: { S: "Novo" },
+          type: { S: "ticket" },
           createdAt: { S: new Date().toISOString() },
         },
       })

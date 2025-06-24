@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/app/hooks/useAuth"; // ✅ usa só seu contexto
+import { useAuth } from "@/app/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import TicketModal from "../../components/TicketModal";
 
 type Ticket = {
   ticketId: string;
-  userEmail: string;
-  userName: string;
+  user: {
+    name: string;
+    email: string;
+  } | null;
   subject: string;
   text: string;
   status: string;
@@ -32,36 +34,55 @@ function timeAgo(dateString: string) {
 
 export default function TicketsManagePage() {
   const router = useRouter();
-  const { isAuthenticated, profile } = useAuth(); // ✅ usa novo contexto
+  const { isAuthenticated, profile } = useAuth();
+  const [lastKey, setLastKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showReplyField, setShowReplyField] = useState(false);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [replyText, setReplyText] = useState("");
 
-  // ✅ Protege a página: se não for advogado, redireciona
   useEffect(() => {
     if (!isAuthenticated) return;
     if (profile !== "advogado") {
       router.replace("/");
+    } else {
+      loadTickets(true);
     }
   }, [isAuthenticated, profile, router]);
 
-  // ✅ Carrega tickets se for advogado
-  useEffect(() => {
-    if (profile !== "advogado") return;
+  const loadTickets = async (initial = false) => {
+    if (initial) {
+      setIsInitialLoading(true);
+      setLastKey(null);
+      setTickets([]);
+    }
+    setLoading(true);
 
-    const load = async () => {
-      const res = await fetch("/api/get-tickets");
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "5");
+      if (!initial && lastKey) params.set("lastKey", lastKey);
+
+      const res = await fetch(`/api/get-tickets?${params.toString()}`);
       const data = await res.json();
+
       const sorted = (data.tickets || []).sort(
         (a: Ticket, b: Ticket) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      setTickets(sorted);
-    };
-    load();
-  }, [profile]);
+
+      setTickets((prev) => (initial ? sorted : [...prev, ...sorted]));
+      setLastKey(data.lastKey ?? null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+      if (initial) setIsInitialLoading(false);
+    }
+  };
 
   const handleSendReply = async () => {
     if (!replyText.trim()) {
@@ -126,12 +147,24 @@ export default function TicketsManagePage() {
   return (
     <div className="bg-gray-50">
       <div className="flex h-screen mt-16 max-w-7xl mx-auto px-4">
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 h-full overflow-y-auto p-8">
           <h1 className="text-2xl font-bold mb-6 text-gray-800">
             Novos tickets
           </h1>
 
           <div className="space-y-6">
+            {isInitialLoading && (
+              <div className="text-gray-500 text-center">
+                Carregando tickets...
+              </div>
+            )}
+
+            {!isInitialLoading && tickets.length === 0 && (
+              <div className="text-gray-500 text-center">
+                Nenhum ticket encontrado.
+              </div>
+            )}
+
             {tickets.map((ticket) => (
               <div
                 key={ticket.ticketId}
@@ -143,8 +176,9 @@ export default function TicketsManagePage() {
                       {ticket.status}
                     </span>
                     <span>{timeAgo(ticket.createdAt)}</span>
-                    <span className="mx-2">·</span>
-                    <span className="text-green-600">{ticket.userEmail}</span>
+                    <span className="text-green-600 ml-2">
+                      {ticket.user?.email}
+                    </span>
                   </div>
 
                   <div className="text-md font-bold text-green-700 mb-1">
@@ -155,7 +189,9 @@ export default function TicketsManagePage() {
                     {ticket.text}
                   </div>
 
-                  <div className="text-sm text-gray-700">{ticket.userName}</div>
+                  <div className="text-sm text-gray-700">
+                    {ticket.user?.name}
+                  </div>
                 </div>
 
                 <button
@@ -169,6 +205,16 @@ export default function TicketsManagePage() {
                 </button>
               </div>
             ))}
+
+            {lastKey && !isInitialLoading && (
+              <button
+                onClick={() => loadTickets(false)}
+                disabled={loading}
+                className="bg-green-500 hover:bg-green-600 mt-8 text-white text-xs px-4 py-2 rounded shadow-sm"
+              >
+                {loading ? "Carregando..." : "Ver mais"}
+              </button>
+            )}
           </div>
         </main>
 

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useProvideAuth } from "../contexts/ProvideAuth";
+import { useAuth } from "../hooks/useAuth"; // ✅ Usa o hook correto
 
 export default function PainelLawyer() {
-  const { user, isAuthenticated } = useProvideAuth();
+  const { user, isAuthenticated, profile } = useAuth();
   const [tickets, setTickets] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [response, setResponse] = useState("");
@@ -33,7 +33,10 @@ export default function PainelLawyer() {
     }
   };
 
+  // ✅ Garante que só advogado veja o painel
   if (!isAuthenticated) return <p>Faça login como advogado.</p>;
+  if (profile !== "advogado")
+    return <p>Você não tem permissão para acessar este painel.</p>;
 
   return (
     <div className="max-w-3xl mx-auto p-8">

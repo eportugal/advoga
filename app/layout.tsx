@@ -2,8 +2,7 @@
 
 import "./globals.css";
 import "./utils/amplify-config"; // garante que configure é chamado 1x
-import { ProvideAuth } from "./contexts/ProvideAuth";
-import { ProvideProfile } from "./contexts/ProvideProfile";
+import { AuthProvider } from "./contexts/AuthProvider";
 import NavBar from "./components/NavBar";
 import Footer from "./components/Footer";
 
@@ -15,13 +14,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <ProvideAuth>
-          <ProvideProfile>
-            <NavBar />
-            <main>{children}</main>
-            <Footer />
-          </ProvideProfile>
-        </ProvideAuth>
+        <AuthProvider>
+          <NavBar />
+          <main>{children}</main>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

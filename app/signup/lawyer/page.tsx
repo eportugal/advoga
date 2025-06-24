@@ -1,25 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
-import {
-  signUp,
-  confirmSignUp,
-  signIn,
-  getCurrentUser,
-} from "aws-amplify/auth";
 import { Amplify } from "aws-amplify";
-import outputs from "@/amplify_outputs.json";
+import outputs from "../../../amplify_outputs.json";
 import { useRouter } from "next/navigation";
-import { useProvideAuth } from "../contexts/ProvideAuth";
-import { useProfile } from "../contexts/ProvideProfile"; // ✅ Importa o hook do profile
+import { useAuth } from "../../hooks/useAuth"; // ✅ Hook correto
 
 Amplify.configure(outputs);
 
-// ✅ Função para validar o formato da OAB
+// ✅ Função para validar OAB
 function isValidOAB(oab: string): boolean {
   const trimmed = oab.trim().toUpperCase();
   const regex = /^(\d{1,7})[-\s/]?([A-Z]{2})$/;
-
   const match = trimmed.match(regex);
   if (!match) return false;
 
@@ -59,8 +51,8 @@ function isValidOAB(oab: string): boolean {
 
 export default function SignUpFlowLawyer() {
   const router = useRouter();
-  const { user, refresh } = useProvideAuth();
-  const { refreshProfile } = useProfile();
+  const { signUp, confirmSignUp, signIn, currentSession } = useAuth(); // ✅ Usar tudo do contexto
+
   const [step, setStep] = useState<"signup" | "confirm">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,7 +67,7 @@ export default function SignUpFlowLawyer() {
 
   const resetError = () => setError("");
 
-  // ✅ 1️⃣ Criar no banco + Cognito
+  // ✅ 1️⃣ Criar no banco + Cognito via contexto
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     resetError();
@@ -85,9 +77,8 @@ export default function SignUpFlowLawyer() {
       const cleanEmail = email.toLowerCase().trim();
       const cleanOAB = oab.trim().toUpperCase();
 
-      // 👉 Valida OAB antes de prosseguir
       if (!isValidOAB(cleanOAB)) {
-        throw new Error("Número da OAB inválido. Formato esperado: 12345/SP");
+        throw new Error("Número da OAB inválido. Exemplo: 12345/SP");
       }
 
       // Cria no banco
@@ -103,21 +94,19 @@ export default function SignUpFlowLawyer() {
       });
       const dbData = await dbRes.json();
       if (!dbData.success) throw new Error(dbData.error);
-
       setUserId(dbData.id);
 
-      // Cria no Cognito
-      await signUp({
-        username: cleanEmail,
+      // Cria no Cognito via contexto
+      const res = await signUp(
+        cleanEmail,
         password,
-        options: {
-          userAttributes: {
-            email: cleanEmail,
-            given_name: firstName.trim(),
-            family_name: lastName.trim(),
-          },
-        },
-      });
+        "advogado",
+        firstName.trim(),
+        lastName.trim()
+      );
+      if (!res.success) {
+        throw new Error(res.message || "Erro no Cognito");
+      }
 
       setStep("confirm");
     } catch (err: any) {
@@ -128,7 +117,7 @@ export default function SignUpFlowLawyer() {
     }
   };
 
-  // ✅ 2️⃣ Confirmar + login + update banco + refreshProfile
+  // ✅ 2️⃣ Confirmar + login + update banco
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     resetError();
@@ -137,17 +126,26 @@ export default function SignUpFlowLawyer() {
     try {
       const cleanEmail = email.toLowerCase().trim();
 
-      // Confirma no Cognito
-      await confirmSignUp({
-        username: cleanEmail,
-        confirmationCode: confirmationCode.trim(),
-      });
+      // Confirma via contexto
+      const confirmRes = await confirmSignUp(
+        cleanEmail,
+        confirmationCode.trim()
+      );
+      if (!confirmRes.success) {
+        throw new Error(confirmRes.message || "Erro ao confirmar");
+      }
 
-      // Login Cognito
-      await signIn({ username: cleanEmail, password });
+      // Login via contexto
+      const signInRes = await signIn(cleanEmail, password);
+      if (!signInRes.success) {
+        throw new Error(signInRes.message || "Erro no login");
+      }
 
-      // Pega o sub garantido
-      const currentUser = await getCurrentUser();
+      // ✅ Pega o sub da sessão do contexto
+      const session = await currentSession();
+      if (!session.success) {
+        throw new Error("Sessão inválida");
+      }
 
       // Atualiza status no banco
       if (userId) {
@@ -157,18 +155,14 @@ export default function SignUpFlowLawyer() {
           body: JSON.stringify({
             id: userId,
             status: "active",
-            cognitoSub: currentUser.userId,
+            cognitoSub: session.sub, // ✅ PEGA DA SESSION!
           }),
         });
       } else {
         console.warn("Nenhum ID de usuário salvo para atualizar status");
       }
 
-      // ✅ Força atualizar o contexto Profile na hora
-      await refreshProfile();
-      await refresh();
-
-      // Redireciona
+      // ✅ Redireciona
       router.push("/");
     } catch (err: any) {
       console.error(err);

@@ -3,7 +3,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { useProvideAuth } from "../contexts/ProvideAuth";
+import { useProvideAuth } from "../contexts/AuthProvider";
 import { useProfile } from "../contexts/ProvideProfile";
 
 export default function RouteListener({

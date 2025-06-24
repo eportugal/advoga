@@ -1,25 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import {
-  signUp,
-  confirmSignUp,
-  signIn,
-  resendSignUpCode,
-  getCurrentUser,
-} from "aws-amplify/auth";
 import { Amplify } from "aws-amplify";
 import outputs from "@/amplify_outputs.json";
 import { useRouter } from "next/navigation";
-import { useProfile } from "../contexts/ProvideProfile"; // ✅ novo!
-import { useProvideAuth } from "../contexts/ProvideAuth";
+import { useAuth } from "../../hooks/useAuth"; // ✅ Hook público!
 
+import { getCurrentUser, resendSignUpCode } from "aws-amplify/auth";
 Amplify.configure(outputs);
 
 export default function SignUpFlow() {
   const router = useRouter();
-  const { refreshProfile } = useProfile(); // ✅ pega refresh do contexto
-  const { refresh } = useProvideAuth();
+  const { signUp, confirmSignUp, signIn, resendConfirmationCode } = useAuth(); // ✅ Pega do contexto
+
   const [step, setStep] = useState<"signup" | "confirm">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,14 +24,13 @@ export default function SignUpFlow() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const resetError = () => setError("");
 
   const resetMessages = () => {
     setError("");
     setSuccess("");
   };
 
-  // ✅ 1️⃣ Criar no banco + Cognito
+  // ✅ 1️⃣ Cria no banco + Cognito usando o contexto
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -47,7 +39,7 @@ export default function SignUpFlow() {
     try {
       const cleanEmail = email.toLowerCase().trim();
 
-      // 1️⃣ Cria no banco
+      // Cria no banco
       const dbRes = await fetch("/api/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,18 +58,18 @@ export default function SignUpFlow() {
 
       setUserId(dbData.id);
 
-      // 2️⃣ Cria no Cognito
-      await signUp({
-        username: cleanEmail,
+      // Cria no Cognito via contexto
+      const signUpRes = await signUp(
+        cleanEmail,
         password,
-        options: {
-          userAttributes: {
-            email: cleanEmail,
-            given_name: firstName.trim(),
-            family_name: lastName.trim(),
-          },
-        },
-      });
+        "regular",
+        firstName.trim(),
+        lastName.trim()
+      );
+
+      if (!signUpRes.success) {
+        throw new Error(signUpRes.message || "Erro no Cognito");
+      }
 
       setSuccess("Código de confirmação enviado para seu email!");
       setStep("confirm");
@@ -89,29 +81,33 @@ export default function SignUpFlow() {
     }
   };
 
-  // ✅ 2️⃣ Confirmar + atualizar banco + login + refreshProfile
+  // ✅ 2️⃣ Confirma + login + atualiza banco + contexto já atualizado
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
-    resetError();
     setLoading(true);
+    resetMessages();
 
     try {
       const cleanEmail = email.toLowerCase().trim();
 
-      // Confirma no Cognito
-      await confirmSignUp({
-        username: cleanEmail,
-        confirmationCode: confirmationCode.trim(),
-      });
+      // Confirma via contexto
+      const confirmRes = await confirmSignUp(
+        cleanEmail,
+        confirmationCode.trim()
+      );
+      if (!confirmRes.success) {
+        throw new Error(confirmRes.message || "Erro ao confirmar");
+      }
 
-      // Login Cognito
-      await signIn({ username: cleanEmail, password });
+      // Login via contexto
+      const signInRes = await signIn(cleanEmail, password);
+      if (!signInRes.success) {
+        throw new Error(signInRes.message || "Erro no login");
+      }
 
-      // Pega o sub garantido
-      const currentUser = await getCurrentUser();
-
-      // Atualiza status no banco
+      // Atualiza banco
       if (userId) {
+        const currentUser = await getCurrentUser();
         await fetch("/api/update-user-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -121,13 +117,7 @@ export default function SignUpFlow() {
             cognitoSub: currentUser.userId,
           }),
         });
-      } else {
-        console.warn("Nenhum ID de usuário salvo para atualizar status");
       }
-
-      // ✅ Força atualizar o contexto Profile na hora
-      await refreshProfile();
-      await refresh();
 
       // Redireciona
       router.push("/");
@@ -144,9 +134,7 @@ export default function SignUpFlow() {
     resetMessages();
 
     try {
-      await resendSignUpCode({
-        username: email.toLowerCase().trim(),
-      });
+      await resendConfirmationCode(email.toLowerCase().trim());
       setSuccess("Novo código enviado!");
     } catch (err: any) {
       console.error(err);

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { withRoleGuard } from "@/app/utils/withRoleGuard";
-import { useProfile } from "@/app/contexts/ProvideProfile";
+import { useAuth } from "@/app/hooks/useAuth"; // ✅ usa só seu contexto
+import { useRouter } from "next/navigation";
 import TicketModal from "../../components/TicketModal";
 
 type Ticket = {
@@ -30,14 +30,27 @@ function timeAgo(dateString: string) {
   return `há ${diffDays} dia${diffDays > 1 ? "s" : ""} atrás`;
 }
 
-function TicketsManagePage() {
+export default function TicketsManagePage() {
+  const router = useRouter();
+  const { isAuthenticated, profile } = useAuth(); // ✅ usa novo contexto
+
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showReplyField, setShowReplyField] = useState(false);
-  const { profile } = useProfile();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [replyText, setReplyText] = useState("");
 
+  // ✅ Protege a página: se não for advogado, redireciona
   useEffect(() => {
+    if (!isAuthenticated) return;
+    if (profile !== "advogado") {
+      router.replace("/");
+    }
+  }, [isAuthenticated, profile, router]);
+
+  // ✅ Carrega tickets se for advogado
+  useEffect(() => {
+    if (profile !== "advogado") return;
+
     const load = async () => {
       const res = await fetch("/api/get-tickets");
       const data = await res.json();
@@ -48,7 +61,7 @@ function TicketsManagePage() {
       setTickets(sorted);
     };
     load();
-  }, []);
+  }, [profile]);
 
   const handleSendReply = async () => {
     if (!replyText.trim()) {
@@ -113,7 +126,6 @@ function TicketsManagePage() {
   return (
     <div className="bg-gray-50">
       <div className="flex h-screen mt-16 max-w-7xl mx-auto px-4">
-        {/* Lista de Tickets */}
         <main className="flex-1 overflow-y-auto p-8">
           <h1 className="text-2xl font-bold mb-6 text-gray-800">
             Novos tickets
@@ -125,29 +137,25 @@ function TicketsManagePage() {
                 key={ticket.ticketId}
                 className="flex items-start justify-between bg-white p-4 rounded border border-gray-200 hover:shadow transition"
               >
-                <div className="flex items-start">
-                  <div>
-                    <div className="flex items-center text-xs text-gray-500 mb-1">
-                      <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-2">
-                        {ticket.status}
-                      </span>
-                      <span>{timeAgo(ticket.createdAt)}</span>
-                      <span className="mx-2">·</span>
-                      <span className="text-green-600">{ticket.userEmail}</span>
-                    </div>
-
-                    <div className="text-md font-bold text-green-700 mb-1">
-                      {ticket.subject}
-                    </div>
-
-                    <div className="mt-1 text-sm text-gray-500 italic break-words">
-                      {ticket.text}
-                    </div>
-
-                    <div className="text-sm text-gray-700">
-                      {ticket.userName}
-                    </div>
+                <div>
+                  <div className="flex items-center text-xs text-gray-500 mb-1">
+                    <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-2">
+                      {ticket.status}
+                    </span>
+                    <span>{timeAgo(ticket.createdAt)}</span>
+                    <span className="mx-2">·</span>
+                    <span className="text-green-600">{ticket.userEmail}</span>
                   </div>
+
+                  <div className="text-md font-bold text-green-700 mb-1">
+                    {ticket.subject}
+                  </div>
+
+                  <div className="mt-1 text-sm text-gray-500 italic break-words">
+                    {ticket.text}
+                  </div>
+
+                  <div className="text-sm text-gray-700">{ticket.userName}</div>
                 </div>
 
                 <button
@@ -164,7 +172,6 @@ function TicketsManagePage() {
           </div>
         </main>
 
-        {/* Modal lateral com botão X */}
         {selectedTicket && (
           <TicketModal
             ticket={selectedTicket}
@@ -185,5 +192,3 @@ function TicketsManagePage() {
     </div>
   );
 }
-
-export default withRoleGuard(TicketsManagePage, ["lawyer"]);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useProvideAuth } from "@/app/contexts/ProvideAuth";
+import { useProvideAuth } from "@/app/contexts/AuthProvider";
 import { useProfile } from "@/app/contexts/ProvideProfile";
 import React, { useEffect } from "react";
 

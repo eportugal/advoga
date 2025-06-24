@@ -2,12 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { signIn } from "aws-amplify/auth";
 import { Amplify } from "aws-amplify";
 import outputs from "@/amplify_outputs.json";
 import { useRouter } from "next/navigation";
-import { useProvideAuth } from "./../contexts/ProvideAuth";
-import { useProfile } from "./../contexts/ProvideProfile"; // ✅
+import { useAuth } from "../hooks/useAuth"; // ✅ Hook público certo
 
 Amplify.configure(outputs);
 
@@ -17,8 +15,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { refresh } = useProvideAuth(); // ✅
-  const { refreshProfile } = useProfile(); // ✅
+
+  const { signIn } = useAuth(); // ✅ Usar apenas o método do contexto!
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,17 +24,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 🔑 1️⃣ Autentica no Cognito
-      await signIn({ username: email, password });
+      // 1️⃣ Usa signIn do contexto — já atualiza tudo
+      const res = await signIn(email, password);
 
-      // 🔑 2️⃣ Garante que o contexto Auth atualize (JWT, session)
-      await refresh();
-
-      // 🔑 3️⃣ Garante que o contexto Profile atualize (nome, role)
-      await refreshProfile();
-
-      // 🔑 4️⃣ Redireciona depois que tudo está limpo
-      router.push("/");
+      if (res.success) {
+        router.push("/");
+      } else {
+        setError(res.message || "Login failed");
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Login failed");

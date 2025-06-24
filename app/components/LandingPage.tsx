@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useProvideAuth } from "../contexts/ProvideAuth";
+import { useProvideAuth } from "../contexts/AuthProvider";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { CheckCircle, Sparkles, Send, MessageCircle } from "lucide-react";

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useProvideAuth } from "../contexts/ProvideAuth";
+import { useProvideAuth } from "../contexts/AuthProvider";
 
 export function useProfile() {
   const { user, isAuthenticated } = useProvideAuth();

@@ -1,10 +1,19 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import TicketModal from "../../components/TicketModal";
 import type { Ticket } from "@/app/types/Ticket";
+import {
+  Button,
+  Chip,
+  CircularProgress,
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Skeleton,
+} from "@mui/material";
 
 function timeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -23,9 +32,8 @@ function timeAgo(dateString: string) {
 
 export default function TicketsManagePage() {
   const router = useRouter();
-  const { isAuthenticated, profile, user } = useAuth(); // ✅ só usa user
-  const [dbUserId, setDbUserId] = useState<string | null>(null); // ✅ id local
-
+  const { isAuthenticated, profile, user } = useAuth();
+  const [dbUserId, setDbUserId] = useState<string | null>(null);
   const [lastKey, setLastKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -34,7 +42,6 @@ export default function TicketsManagePage() {
   const [showReplyField, setShowReplyField] = useState(false);
   const [replyText, setReplyText] = useState("");
 
-  // ✅ Igual ao seu padrão
   useEffect(() => {
     const loadDbUser = async () => {
       if (!user) return;
@@ -55,7 +62,6 @@ export default function TicketsManagePage() {
     loadDbUser();
   }, [user]);
 
-  // Protege rota e carrega tickets
   useEffect(() => {
     if (!isAuthenticated) return;
     if (profile !== "advogado") {
@@ -107,8 +113,6 @@ export default function TicketsManagePage() {
       return;
     }
 
-    console.log("[DEBUG] Enviando reply com ID:", dbUserId);
-
     try {
       const res = await fetch("/api/respond-ticket", {
         method: "POST",
@@ -116,7 +120,7 @@ export default function TicketsManagePage() {
         body: JSON.stringify({
           ticketId: selectedTicket?.ticketId,
           reply: replyText,
-          lawyerId: dbUserId, // ✅ usa id local
+          lawyerId: dbUserId,
         }),
       });
 
@@ -165,77 +169,119 @@ export default function TicketsManagePage() {
   };
 
   return (
-    <div className="bg-gray-50">
-      <div className="flex h-screen mt-16 max-w-7xl mx-auto px-4">
-        <main className="flex-1 h-full overflow-y-auto p-8">
-          <h1 className="text-2xl font-bold mb-6 text-gray-800">
+    <Box className="bg-gray-50 mt-16">
+      <Container maxWidth="lg" className="h-screen flex px-4">
+        <main className="flex-1 overflow-y-auto py-8">
+          <Typography
+            marginBottom={2}
+            variant="h5"
+            className="font-bold text-gray-800"
+          >
             Novos tickets
-          </h1>
+          </Typography>
 
-          <div className="space-y-6">
+          <Box className="space-y-6">
             {isInitialLoading && (
-              <div className="text-gray-500 text-center">
-                Carregando tickets...
-              </div>
+              <>
+                {[...Array(3)].map((_, i) => (
+                  <Paper
+                    key={i}
+                    className=" border p-4 border-gray-200 hover:shadow transition"
+                  >
+                    <Box className="mb-2 flex justify-between gap-2">
+                      <Box width="88%">
+                        <Box className="flex">
+                          <Skeleton variant="text" width="10%" height={20} />
+                          <Skeleton
+                            className="ml-2"
+                            variant="text"
+                            width="15%"
+                            height={20}
+                          />
+                          <Skeleton
+                            className="ml-2"
+                            variant="text"
+                            width="20%"
+                            height={20}
+                          />
+                        </Box>
+                        <Skeleton variant="text" width="30%" height={20} />
+                        <Skeleton variant="text" width="100%" height={20} />
+                        <Skeleton variant="text" width="40%" height={20} />
+                      </Box>
+                      <Skeleton variant="rounded" width={98} height={40} />
+                    </Box>
+                  </Paper>
+                ))}
+              </>
             )}
 
             {!isInitialLoading && tickets.length === 0 && (
-              <div className="text-gray-500 text-center">
+              <Typography className="text-gray-500 text-center">
                 Nenhum ticket encontrado.
-              </div>
+              </Typography>
             )}
 
             {tickets.map((ticket) => (
-              <div
+              <Paper
                 key={ticket.ticketId}
-                className="flex items-start justify-between bg-white p-4 rounded border border-gray-200 hover:shadow transition"
+                className="p-4 border border-gray-200 hover:shadow transition"
               >
-                <div>
-                  <div className="flex items-center text-xs text-gray-500 mb-1">
-                    <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-2">
-                      {ticket.status}
-                    </span>
-                    <span>{timeAgo(ticket.createdAt)}</span>
-                    <span className="text-green-600 ml-2">
-                      {ticket.user?.email}
-                    </span>
-                  </div>
+                <Box className="flex justify-between">
+                  <Box>
+                    <Box className="flex items-center text-xs text-gray-500 mb-1 gap-2">
+                      <Chip
+                        label={ticket.status}
+                        size="small"
+                        className="bg-gray-200 text-gray-700"
+                      />
+                      <span>{timeAgo(ticket.createdAt)}</span>
+                      <span className="text-color-primary">
+                        {ticket.user?.email}
+                      </span>
+                    </Box>
 
-                  <div className="text-md font-bold text-green-700 mb-1">
-                    {ticket.subject}
-                  </div>
+                    <Typography className="text-md font-bold text-green-700 mb-1">
+                      {ticket.subject}
+                    </Typography>
 
-                  <div className="mt-1 text-sm text-gray-500 italic break-words">
-                    {ticket.text}
-                  </div>
+                    <Typography className="text-sm text-gray-500 italic break-words">
+                      {ticket.text}
+                    </Typography>
 
-                  <div className="text-sm text-gray-700">
-                    {ticket.user?.name}
-                  </div>
-                </div>
+                    <Typography className="text-sm text-gray-700">
+                      {ticket.user?.name}
+                    </Typography>
+                  </Box>
 
-                <button
-                  onClick={() => {
-                    setSelectedTicket(ticket);
-                    setReplyText("");
-                  }}
-                  className="bg-green-500 hover:bg-green-600 text-white text-xs px-4 py-2 rounded shadow-sm"
-                >
-                  Responder
-                </button>
-              </div>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => {
+                      setSelectedTicket(ticket);
+                      setReplyText("");
+                    }}
+                    className="text-xs h-10"
+                  >
+                    Responder
+                  </Button>
+                </Box>
+              </Paper>
             ))}
 
             {lastKey && !isInitialLoading && (
-              <button
+              <Button
                 onClick={() => loadTickets(false)}
                 disabled={loading}
-                className="bg-green-500 hover:bg-green-600 mt-8 text-white text-xs px-4 py-2 rounded shadow-sm"
+                variant="contained"
+                color="success"
+                size="small"
+                className="mt-8 text-xs"
               >
                 {loading ? "Carregando..." : "Ver mais"}
-              </button>
+              </Button>
             )}
-          </div>
+          </Box>
         </main>
 
         {selectedTicket && (
@@ -254,7 +300,7 @@ export default function TicketsManagePage() {
             onShowReplyField={() => setShowReplyField(true)}
           />
         )}
-      </div>
-    </div>
+      </Container>
+    </Box>
   );
 }

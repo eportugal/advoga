@@ -1,10 +1,14 @@
 // app/layout.tsx
-
+import "@fontsource/roboto/300.css";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/700.css";
 import "./globals.css";
-import "./utils/amplify-config"; // garante que configure é chamado 1x
+import "./utils/amplify-config";
 import { AuthProvider } from "./contexts/AuthProvider";
 import NavBar from "./components/NavBar";
 import Footer from "./components/Footer";
+import ClientLayout from "./ClientLayout";
 
 export default function RootLayout({
   children,
@@ -15,9 +19,13 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body>
         <AuthProvider>
-          <NavBar />
-          <main>{children}</main>
-          <Footer />
+          <ClientLayout>
+            <NavBar />
+            <main className="w-ful bg-white" style={{ marginTop: "64px" }}>
+              {children}
+            </main>
+            <Footer />
+          </ClientLayout>
         </AuthProvider>
       </body>
     </html>

@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       lastName,
       email,
       role: roleFromClient,
+      practiceAreas,
     } = await req.json();
 
     let role: string = "lawyer";
@@ -84,8 +85,12 @@ export async function POST(req: NextRequest) {
     const newId = updateRes.Attributes!.currentValue.N;
 
     if (!newId) throw new Error("Não foi possível gerar novo ID.");
-
-    // Cria usuário
+    if (!Array.isArray(practiceAreas) || practiceAreas.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Selecione ao menos uma área de atuação." },
+        { status: 400 }
+      );
+    }
     const createUserCommand = new PutItemCommand({
       TableName: "users",
       Item: {
@@ -97,6 +102,9 @@ export async function POST(req: NextRequest) {
         role: { S: role },
         createdAt: { S: new Date().toISOString() },
         updatedAt: { S: new Date().toISOString() },
+        practiceAreas: {
+          L: practiceAreas.map((area: string) => ({ S: area.trim() })),
+        },
       },
       ConditionExpression: "attribute_not_exists(id)",
     });

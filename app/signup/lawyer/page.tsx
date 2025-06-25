@@ -1,22 +1,59 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Amplify } from "aws-amplify";
 import outputs from "../../../amplify_outputs.json";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../../hooks/useAuth"; // ✅ Hook correto
+import { useAuth } from "../../hooks/useAuth";
+import {
+  Box,
+  Button,
+  Container,
+  TextField,
+  Typography,
+  Alert,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  CircularProgress,
+  Chip,
+  Select,
+  OutlinedInput,
+} from "@mui/material";
+import { Theme, useTheme } from "@mui/material/styles";
+import type { SelectChangeEvent } from "@mui/material/Select";
 
 Amplify.configure(outputs);
 
-// ✅ Função para validar OAB
-function isValidOAB(oab: string): boolean {
-  const trimmed = oab.trim().toUpperCase();
-  const regex = /^(\d{1,7})[-\s/]?([A-Z]{2})$/;
-  const match = trimmed.match(regex);
-  if (!match) return false;
+export default function SignUpFlowLawyer() {
+  const router = useRouter();
+  const { signUp, confirmSignUp, signIn, currentSession, isLoading } =
+    useAuth();
 
-  const uf = match[2];
-  const validUFs = [
+  const [step, setStep] = useState<"signup" | "confirm">("signup");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [confirmationCode, setConfirmationCode] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [practiceAreas, setPracticeAreas] = useState<string[]>([]);
+  const allPracticeAreas = [
+    "Civil",
+    "Criminal",
+    "Trabalhista",
+    "Tributário",
+    "Família",
+    "Consumidor",
+    "Previdenciário",
+    "Ambiental",
+    "Empresarial",
+  ];
+
+  const ufOptions = [
     "AC",
     "AL",
     "AP",
@@ -46,42 +83,77 @@ function isValidOAB(oab: string): boolean {
     "TO",
   ];
 
-  return validUFs.includes(uf);
-}
+  const [oabNumber, setOabNumber] = useState("");
+  const [oabUF, setOabUF] = useState("");
+  const [isOabValidating, setIsOabValidating] = useState(false);
+  const [oabValidationError, setOabValidationError] = useState("");
+  const [isOabValid, setIsOabValid] = useState<boolean | null>(null);
 
-export default function SignUpFlowLawyer() {
-  const router = useRouter();
-  const { signUp, confirmSignUp, signIn, currentSession } = useAuth(); // ✅ Usar tudo do contexto
-
-  const [step, setStep] = useState<"signup" | "confirm">("signup");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [oab, setOab] = useState("");
-  const [confirmationCode, setConfirmationCode] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
+  const theme = useTheme();
   const resetError = () => setError("");
 
-  // ✅ 1️⃣ Criar no banco + Cognito via contexto
+  useEffect(() => {
+    const validate = async () => {
+      setIsOabValid(null);
+      setOabValidationError("");
+
+      if (oabNumber.length < 3 || oabUF.length !== 2 || firstName.length < 2)
+        return;
+
+      setIsOabValidating(true);
+      try {
+        const res = await fetch("/api/validar-oab", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            number: oabNumber.trim(),
+            uf: oabUF.trim().toUpperCase(),
+            nome: firstName.trim(),
+          }),
+        });
+
+        const result = await res.json();
+
+        if (!result.success) {
+          setIsOabValid(false);
+          setOabValidationError("Erro interno no servidor");
+          return;
+        }
+
+        if (!result.valid) {
+          setIsOabValid(false);
+          setOabValidationError("Verifique o número de inscrição");
+          return;
+        }
+
+        if (!result.nomeCoincide) {
+          setIsOabValid(false);
+          setOabValidationError("Nome não confere com a OAB");
+          return;
+        }
+
+        // Se tudo certo
+        setIsOabValid(true);
+        setOabValidationError("");
+      } catch (err: any) {
+        setIsOabValid(false);
+        setOabValidationError("Erro inesperado na validação.");
+      } finally {
+        setIsOabValidating(false);
+      }
+    };
+
+    validate();
+  }, [oabNumber, oabUF, firstName]);
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     resetError();
     setLoading(true);
-
     try {
       const cleanEmail = email.toLowerCase().trim();
-      const cleanOAB = oab.trim().toUpperCase();
+      const cleanOAB = `${oabNumber.trim()}/${oabUF.trim().toUpperCase()}`;
 
-      if (!isValidOAB(cleanOAB)) {
-        throw new Error("Número da OAB inválido. Exemplo: 12345/SP");
-      }
-
-      // Cria no banco
       const dbRes = await fetch("/api/create-lawyer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,13 +162,15 @@ export default function SignUpFlowLawyer() {
           lastName: lastName.trim(),
           email: cleanEmail,
           oab: cleanOAB,
+          practiceAreas,
         }),
       });
+
       const dbData = await dbRes.json();
       if (!dbData.success) throw new Error(dbData.error);
+
       setUserId(dbData.id);
 
-      // Cria no Cognito via contexto
       const res = await signUp(
         cleanEmail,
         password,
@@ -104,9 +178,7 @@ export default function SignUpFlowLawyer() {
         firstName.trim(),
         lastName.trim()
       );
-      if (!res.success) {
-        throw new Error(res.message || "Erro no Cognito");
-      }
+      if (!res.success) throw new Error(res.message || "Erro no Cognito");
 
       setStep("confirm");
     } catch (err: any) {
@@ -117,37 +189,24 @@ export default function SignUpFlowLawyer() {
     }
   };
 
-  // ✅ 2️⃣ Confirmar + login + update banco
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     resetError();
     setLoading(true);
-
     try {
       const cleanEmail = email.toLowerCase().trim();
-
-      // Confirma via contexto
       const confirmRes = await confirmSignUp(
         cleanEmail,
-        confirmationCode.trim()
+        confirmationCode.trim().padEnd(6, " ")
       );
-      if (!confirmRes.success) {
-        throw new Error(confirmRes.message || "Erro ao confirmar");
-      }
+      if (!confirmRes.success) throw new Error(confirmRes.message);
 
-      // Login via contexto
       const signInRes = await signIn(cleanEmail, password);
-      if (!signInRes.success) {
-        throw new Error(signInRes.message || "Erro no login");
-      }
+      if (!signInRes.success) throw new Error(signInRes.message);
 
-      // ✅ Pega o sub da sessão do contexto
       const session = await currentSession();
-      if (!session.success) {
-        throw new Error("Sessão inválida");
-      }
+      if (!session.success) throw new Error("Sessão inválida");
 
-      // Atualiza status no banco
       if (userId) {
         await fetch("/api/update-user-status", {
           method: "POST",
@@ -155,14 +214,11 @@ export default function SignUpFlowLawyer() {
           body: JSON.stringify({
             id: userId,
             status: "active",
-            cognitoSub: session.sub, // ✅ PEGA DA SESSION!
+            cognitoSub: session.sub,
           }),
         });
-      } else {
-        console.warn("Nenhum ID de usuário salvo para atualizar status");
       }
 
-      // ✅ Redireciona
       router.push("/");
     } catch (err: any) {
       console.error(err);
@@ -172,81 +228,238 @@ export default function SignUpFlowLawyer() {
     }
   };
 
+  function getStyles(name: string, selected: string[], theme: Theme) {
+    return {
+      fontWeight: selected.includes(name)
+        ? theme.typography.fontWeightMedium
+        : theme.typography.fontWeightRegular,
+    };
+  }
+
+  const handlePracticeAreasChange = (
+    event: SelectChangeEvent<typeof practiceAreas>
+  ) => {
+    const { value } = event.target;
+    setPracticeAreas(typeof value === "string" ? value.split(",") : value);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
+        <CircularProgress size={60} thickness={5} color="primary" />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-md mx-auto p-8 bg-white shadow rounded">
-      <h1 className="text-2xl font-bold mb-4">Cadastro de Advogado</h1>
+    <Container maxWidth="sm">
+      <Box className="mt-2 bg-white p-8">
+        <Typography variant="h5" align="center" fontWeight={700} gutterBottom>
+          {step === "signup" ? "Cadastro de Advogado" : "Confirmar Código"}
+        </Typography>
 
-      {step === "signup" && (
-        <form onSubmit={handleSignUp} className="space-y-4">
-          <input
-            placeholder="Nome"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-            className="w-full border p-2"
-          />
-          <input
-            placeholder="Sobrenome"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-            className="w-full border p-2"
-          />
-          <input
-            placeholder="OAB (ex: 12345/SP)"
-            value={oab}
-            onChange={(e) => setOab(e.target.value)}
-            required
-            className="w-full border p-2"
-          />
-          <input
-            placeholder="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full border p-2"
-          />
-          <input
-            placeholder="Senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full border p-2"
-          />
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded w-full"
+        {step === "signup" && (
+          <Box
+            component="form"
+            onSubmit={handleSignUp}
+            noValidate
+            className="mt-2"
           >
-            {loading ? "Criando..." : "Cadastrar"}
-          </button>
-        </form>
-      )}
+            <TextField
+              fullWidth
+              label="Nome"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Sobrenome"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              margin="normal"
+              required
+            />
 
-      {step === "confirm" && (
-        <form onSubmit={handleConfirm} className="space-y-4">
-          <input
-            placeholder="Código de Confirmação"
-            value={confirmationCode}
-            onChange={(e) => setConfirmationCode(e.target.value)}
-            required
-            className="w-full border p-2"
-          />
+            <Box display="flex" gap={2} marginTop={2}>
+              <TextField
+                label="Número da OAB"
+                fullWidth
+                value={oabNumber}
+                onChange={(e) =>
+                  setOabNumber(e.target.value.replace(/\D/g, ""))
+                }
+                required
+                error={isOabValid === false}
+                helperText={isOabValid === false ? oabValidationError : ""}
+              />
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-green-600 text-white px-4 py-2 rounded w-full"
+              <FormControl
+                sx={{
+                  width: 120,
+                }}
+                required
+                error={isOabValid === false}
+              >
+                <InputLabel id="uf-label">UF</InputLabel>
+                <Select
+                  labelId="uf-label"
+                  value={oabUF}
+                  label="UF"
+                  onChange={(e) => setOabUF(e.target.value)}
+                >
+                  {ufOptions.map((uf) => (
+                    <MenuItem key={uf} value={uf}>
+                      {uf}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            <FormControl fullWidth margin="normal" required>
+              <InputLabel id="practice-areas-chip-label">
+                Áreas de Atuação
+              </InputLabel>
+              <Select
+                labelId="practice-areas-chip-label"
+                id="practice-areas-chip"
+                multiple
+                value={practiceAreas}
+                onChange={handlePracticeAreasChange}
+                input={
+                  <OutlinedInput
+                    id="select-multiple-chip"
+                    label="Áreas de Atuação"
+                  />
+                }
+                renderValue={(selected) => (
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {selected.map((value) => (
+                      <Chip
+                        key={value}
+                        label={value}
+                        onDelete={() =>
+                          setPracticeAreas((prev) =>
+                            prev.filter((item) => item !== value)
+                          )
+                        }
+                        onMouseDown={(e) => e.stopPropagation()}
+                      />
+                    ))}
+                  </Box>
+                )}
+              >
+                {allPracticeAreas.map((area) => (
+                  <MenuItem
+                    key={area}
+                    value={area}
+                    style={getStyles(area, practiceAreas, theme)}
+                  >
+                    {area}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField
+              fullWidth
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Senha"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              margin="normal"
+              required
+            />
+
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              disabled={loading || isOabValid === false || isOabValidating}
+              className="mt-2"
+            >
+              {loading ? "Criando..." : "Cadastrar"}
+            </Button>
+          </Box>
+        )}
+
+        {step === "confirm" && (
+          <Box
+            component="form"
+            onSubmit={handleConfirm}
+            noValidate
+            className="mt-2 flex flex-col items-center"
           >
-            {loading ? "Confirmando..." : "Confirmar e Entrar"}
-          </button>
-        </form>
-      )}
+            <Box display="flex" gap={1} justifyContent="center">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <TextField
+                  key={i}
+                  inputProps={{
+                    maxLength: 1,
+                    style: { textAlign: "center", fontSize: "1.5rem" },
+                    inputMode: "numeric",
+                  }}
+                  value={confirmationCode[i] || ""}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, "");
+                    if (!value) return;
+                    const updated =
+                      confirmationCode.substring(0, i) +
+                      value +
+                      confirmationCode.substring(i + 1);
+                    setConfirmationCode(updated);
+                    const next = document.getElementById(`digit-${i + 1}`);
+                    if (next) (next as HTMLInputElement).focus();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Backspace") {
+                      const updated =
+                        confirmationCode.substring(0, i) +
+                        " " +
+                        confirmationCode.substring(i + 1);
+                      setConfirmationCode(updated.trim());
+                      if (i > 0) {
+                        const prev = document.getElementById(`digit-${i - 1}`);
+                        if (prev) (prev as HTMLInputElement).focus();
+                      }
+                    }
+                  }}
+                  id={`digit-${i}`}
+                  sx={{ width: 50 }}
+                />
+              ))}
+            </Box>
 
-      {error && <p className="mt-4 text-red-600">{error}</p>}
-    </div>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              color="success"
+              disabled={loading}
+              className="mt-4"
+            >
+              {loading ? "Confirmando..." : "Confirmar e Entrar"}
+            </Button>
+          </Box>
+        )}
+
+        {error && (
+          <Alert severity="error" className="mt-3">
+            {error}
+          </Alert>
+        )}
+      </Box>
+    </Container>
   );
 }

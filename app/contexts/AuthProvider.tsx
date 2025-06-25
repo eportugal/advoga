@@ -95,16 +95,19 @@ function useProvideAuth(): AuthContextType {
     checkAuthState();
   }, []);
 
-  const refreshProfile = async () => {
-    if (!user?.signInDetails?.loginId) return;
+  const refreshProfile = async (emailOverride?: string) => {
+    const email = emailOverride || user?.signInDetails?.loginId;
+    if (!email) return;
+
     const res = await fetch("/api/get-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: user.signInDetails.loginId }),
+      body: JSON.stringify({ email }),
     });
     const data = await res.json();
     if (data.success) {
       setDbUser(data.user);
+      console.log("✅ dbUser atualizado via refreshProfile");
     } else {
       setDbUser(null);
     }
@@ -232,7 +235,8 @@ function useProvideAuth(): AuthContextType {
       setProfile(profileType as "regular" | "advogado");
       setIsAuthenticated(true);
 
-      await refreshProfile();
+      await refreshProfile(currentUser.signInDetails?.loginId);
+
       return { success: true, profile: profileType };
     } catch (error: any) {
       return { success: false, message: error.message };
@@ -271,3 +275,5 @@ function useProvideAuth(): AuthContextType {
     refreshProfile,
   };
 }
+
+export { useProvideAuth };

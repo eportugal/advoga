@@ -1,95 +1,426 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useEffect } from "react";
+import { Amplify } from "aws-amplify";
+import outputs from "@/amplify_outputs.json";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/app/hooks/useAuth";
+import { useAuth } from "../hooks/useAuth";
+import { getCurrentUser } from "aws-amplify/auth";
+import {
+  Box,
+  Button,
+  Container,
+  TextField,
+  Typography,
+  IconButton,
+  Alert,
+  Paper,
+  Link,
+  CircularProgress,
+  Grid,
+} from "@mui/material";
+import { CheckCircle, Eye, EyeOff } from "lucide-react";
+import ConfirmationCodeInput from "../components/ConfirmationCodeInput";
+import { blueGrey } from "@mui/material/colors";
 
-export default function LoginPage() {
-  const { isAuthenticated, signIn, isLoading } = useAuth();
+Amplify.configure(outputs);
+
+export default function AuthFlow() {
   const router = useRouter();
+  const { signUp, confirmSignUp, signIn, resendConfirmationCode, isLoading } =
+    useAuth();
+
+  const [step, setStep] = useState<"login" | "signup" | "confirm">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [confirmationCode, setConfirmationCode] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmSuccess, setConfirmSuccess] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  // ✅ 1️⃣ Redireciona se já estiver logado
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace("/"); // já logado → home
-    }
-  }, [isAuthenticated, isLoading, router]);
+  const resetMessages = () => {
+    setError("");
+    setSuccess("");
+  };
 
-  // ✅ 2️⃣ Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
+    setLoginLoading(true);
+    resetMessages();
     try {
-      const res = await signIn(email, password);
-      if (!res.success) {
-        throw new Error(res.message || "Login falhou");
-      }
-      router.push("/"); // login OK → home
+      const signInRes = await signIn(email, password);
+      if (!signInRes.success) throw new Error(signInRes.message);
+      setLoginSuccess(true);
+      setTimeout(() => {
+        router.push("/");
+      }, 1000);
     } catch (err: any) {
       setError(err.message || "Erro inesperado");
     } finally {
-      setLoading(false);
+      setLoginLoading(false);
     }
   };
-  if (isLoading) {
+
+  if (loginLoading || loginSuccess) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
-        <div className="animate-spin rounded-full h-20 w-20 border-t-4 border-blue-600"></div>
+        {loginSuccess ? (
+          <CheckCircle size={60} color="green" />
+        ) : (
+          <CircularProgress size={60} thickness={5} color="primary" />
+        )}
       </div>
     );
   }
 
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    resetMessages();
+    try {
+      const cleanEmail = email.toLowerCase().trim();
+      const dbRes = await fetch("/api/create-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: cleanEmail,
+        }),
+      });
+      const dbData = await dbRes.json();
+      if (!dbRes.ok || !dbData.success) {
+        throw new Error(dbData.error || "Erro ao criar usuário no banco");
+      }
+      setUserId(dbData.id);
+      const signUpRes = await signUp(
+        cleanEmail,
+        password,
+        "regular",
+        firstName.trim(),
+        lastName.trim()
+      );
+      if (!signUpRes.success) {
+        throw new Error(signUpRes.message || "Erro no Cognito");
+      }
+      setSuccess("Código de confirmação enviado para seu email!");
+      setStep("confirm");
+    } catch (err: any) {
+      setError(err.message || "Erro desconhecido");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setConfirmLoading(true);
+    resetMessages();
+    try {
+      const cleanEmail = email.toLowerCase().trim();
+      const confirmRes = await confirmSignUp(
+        cleanEmail,
+        confirmationCode.trim()
+      );
+      if (!confirmRes.success) throw new Error(confirmRes.message);
+      const signInRes = await signIn(cleanEmail, password);
+      if (!signInRes.success) throw new Error(signInRes.message);
+      if (userId) {
+        const currentUser = await getCurrentUser();
+        await fetch("/api/update-user-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: userId,
+            status: "active",
+            cognitoSub: currentUser.userId,
+          }),
+        });
+      }
+      setConfirmSuccess(true);
+      setTimeout(() => {
+        router.push("/");
+      }, 1000); // só para dar tempo de ver o check
+    } catch (err: any) {
+      setError(err.message || "Erro inesperado");
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const resendCode = async () => {
+    setLoading(true);
+    resetMessages();
+    try {
+      await resendConfirmationCode(email.toLowerCase().trim());
+      setSuccess("Novo código enviado!");
+    } catch (err: any) {
+      setError(err.message || "Erro ao reenviar código");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <>
-      <Link
-        href="/"
-        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-      >
-        Voltar
-      </Link>
+    <Container>
+      <Grid container spacing={4} className="justify-between py-8">
+        <Grid
+          size={6}
+          sx={{
+            backgroundColor: "primary.main",
+            color: "white",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            textAlign: "center",
+            px: 6,
+            py: 10,
+            minHeight: "80vh",
+            borderRadius: 4,
+          }}
+        >
+          <Typography variant="h4" fontWeight={700} gutterBottom>
+            Comece sua jornada com a gente.
+          </Typography>
 
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="w-full max-w-md bg-white shadow-md rounded-lg p-8">
-          <h1 className="text-2xl font-bold mb-6 text-center text-black">
-            Login
-          </h1>
+          <Typography variant="body1" sx={{ maxWidth: 400, mb: 6 }}>
+            Descubra a melhor comunidade de advogados e clientes para resolver
+            seus problemas jurídicos com confiança.
+          </Typography>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded px-4 py-2"
-            />
-            <input
-              type="password"
-              placeholder="Senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded px-4 py-2"
-            />
+          <Paper
+            elevation={6}
+            sx={{
+              backgroundColor: "rgba(255, 255, 255, 0.1)",
+              p: 3,
+              borderRadius: 3,
+              maxWidth: 360,
+              color: "white",
+              backdropFilter: "blur(5px)",
+            }}
+          >
+            <Typography variant="body2" sx={{ fontStyle: "italic", mb: 2 }}>
+              “Simplesmente incrível! Consegui resolver meu problema jurídico
+              muito rápido. Recomendo demais.”
+            </Typography>
+            <Typography variant="caption" display="block" fontWeight={600}>
+              João Silva – Cliente
+            </Typography>
+          </Paper>
+        </Grid>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+        <Grid size={6} className="min-h-[80vh]">
+          <Paper
+            className="bg-white shadow-md p-8 min-h-[80vh] flex flex-col"
+            sx={{
+              borderRadius: 4,
+            }}
+          >
+            <Box marginTop={8} textAlign="center">
+              <Typography
+                variant="h5"
+                fontWeight={700}
+                gutterBottom
+                align="center"
+              >
+                {step === "login"
+                  ? "Entrar"
+                  : step === "signup"
+                  ? "Criar Conta"
+                  : "Confirmar Código"}
+              </Typography>
+            </Box>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-            >
-              {loading ? "Entrando..." : "Entrar"}
-            </button>
-          </form>
-        </div>
-      </div>
-    </>
+            {step === "login" && (
+              <Box
+                component="form"
+                onSubmit={handleLogin}
+                className="mt-4 space-y-6"
+              >
+                <TextField
+                  fullWidth
+                  label="Email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Senha"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  InputProps={{
+                    endAdornment: (
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                      >
+                        {showPassword ? (
+                          <EyeOff size={20} />
+                        ) : (
+                          <Eye size={20} />
+                        )}
+                      </IconButton>
+                    ),
+                  }}
+                />
+
+                {/* ✅ BOTÃO AJUSTADO */}
+                <Button
+                  type="submit"
+                  fullWidth
+                  variant="contained"
+                  disabled={loginLoading || loginSuccess}
+                  startIcon={
+                    loginSuccess ? (
+                      <CheckCircle size={20} />
+                    ) : loginLoading ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : undefined
+                  }
+                >
+                  {loginSuccess
+                    ? "Logado com sucesso!"
+                    : loginLoading
+                    ? "Entrando..."
+                    : "Entrar"}
+                </Button>
+
+                <Typography align="center">
+                  Não tem uma conta?{" "}
+                  <Link component="button" onClick={() => setStep("signup")}>
+                    Criar uma
+                  </Link>
+                </Typography>
+              </Box>
+            )}
+
+            {step === "signup" && (
+              <Box
+                component="form"
+                onSubmit={handleSignUp}
+                noValidate
+                className="mt-4 space-y-6"
+              >
+                <TextField
+                  fullWidth
+                  label="Nome"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Sobrenome"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Senha"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  InputProps={{
+                    endAdornment: (
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                      >
+                        {showPassword ? (
+                          <EyeOff size={20} />
+                        ) : (
+                          <Eye size={20} />
+                        )}
+                      </IconButton>
+                    ),
+                  }}
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  variant="contained"
+                  disabled={loading}
+                >
+                  {loading ? "Criando..." : "Criar Conta"}
+                </Button>
+                <Typography align="center">
+                  Já tem uma conta?{" "}
+                  <Link component="button" onClick={() => setStep("login")}>
+                    Entrar
+                  </Link>
+                </Typography>
+              </Box>
+            )}
+
+            {step === "confirm" && (
+              <Box component="form" onSubmit={handleConfirm}>
+                <ConfirmationCodeInput
+                  confirmationCode={confirmationCode}
+                  setConfirmationCode={setConfirmationCode}
+                  onResend={resendCode}
+                  loading={loading}
+                  email={email}
+                />
+
+                <Button
+                  className="mt-8"
+                  type="submit"
+                  fullWidth
+                  variant="contained"
+                  disabled={confirmLoading || confirmSuccess}
+                  startIcon={
+                    confirmSuccess ? (
+                      <CheckCircle size={20} />
+                    ) : confirmLoading ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : undefined
+                  }
+                >
+                  {confirmSuccess
+                    ? "Confirmado!"
+                    : confirmLoading
+                    ? "Confirmando..."
+                    : "Confirmar e Entrar"}
+                </Button>
+              </Box>
+            )}
+
+            {error && (
+              <Alert severity="error" className="mt-6">
+                {error}
+              </Alert>
+            )}
+            {success && (
+              <Alert severity="success" className="mt-6">
+                {success}
+              </Alert>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
+    </Container>
   );
 }

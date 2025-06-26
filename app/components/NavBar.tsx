@@ -5,19 +5,11 @@ import { useAuth } from "../hooks/useAuth";
 import { Scale, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Skeleton, Container, Grid, Box, IconButton } from "@mui/material";
+import { Skeleton, Container, Grid, Box, Button } from "@mui/material";
 
 export default function NavBar() {
   const router = useRouter();
-  const { isAuthenticated, dbUser, isLoading, profile, signOut } = useAuth();
-  const [userName, setUserName] = useState<string>("");
-
-  useEffect(() => {
-    if (dbUser) {
-      const firstName = dbUser.firstName || "Usuário";
-      setUserName(profile === "advogado" ? `Dr(a). ${firstName}` : firstName);
-    }
-  }, [dbUser, profile]);
+  const { isAuthenticated, profile, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -72,16 +64,15 @@ export default function NavBar() {
 
               {isAuthenticated ? (
                 <Box className="flex items-center space-x-2">
-                  {userName ? (
-                    <span className="text-gray-600">
-                      Bem-vindo(a), {userName}!
-                    </span>
-                  ) : (
-                    <Skeleton variant="text" width={100} height={24} />
-                  )}
-                  <IconButton onClick={handleSignOut}>
-                    <LogOut className="h-5 w-5 text-gray-600 hover:text-gray-900" />
-                  </IconButton>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={handleSignOut}
+                    startIcon={<LogOut />}
+                    sx={{ color: "rgb(156, 163, 175)", height: "30px" }} // equivalente ao Tailwind `text-gray-700`
+                  >
+                    Sair
+                  </Button>
                 </Box>
               ) : (
                 <Link

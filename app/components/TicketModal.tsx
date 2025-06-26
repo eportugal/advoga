@@ -8,7 +8,6 @@ type Ticket = {
     name: string;
     email: string;
   } | null;
-  subject: string;
   text: string;
   status: string;
   createdAt: string;
@@ -52,7 +51,6 @@ export default function TicketModal({
 
         <div className="mb-4">
           <p className="text-gray-600 mb-1">Assunto</p>
-          <h3 className="font-semibold text-gray-700">{ticket.subject}</h3>
         </div>
 
         {ticket.area && (

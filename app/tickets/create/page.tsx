@@ -22,7 +22,7 @@ function Accordion({
   lawyerName,
 }: {
   reply: string;
-  lawyerName?: string;
+  lawyerName?: string | null;
 }) {
   return (
     <MuiAccordion className="border-t mt-2" disableGutters elevation={0}>
@@ -61,7 +61,6 @@ export default function CreateTicketPage() {
   const router = useRouter();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [subject, setSubject] = useState("");
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -92,8 +91,8 @@ export default function CreateTicketPage() {
   }, [dbUser]);
 
   const handleCreate = async () => {
-    if (!subject.trim() || !text.trim()) {
-      setError("Preencha todos os campos.");
+    if (!text.trim()) {
+      setError("Preencha a informação.");
       return;
     }
 
@@ -111,7 +110,6 @@ export default function CreateTicketPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: dbUser.id,
-          subject: subject.trim(),
           text: text.trim(),
         }),
       });
@@ -119,7 +117,6 @@ export default function CreateTicketPage() {
       if (!data.success) throw new Error(data.error);
 
       alert("Ticket criado com sucesso!");
-      setSubject("");
       setText("");
       await fetchTickets(dbUser.id);
     } catch (err: any) {
@@ -137,14 +134,6 @@ export default function CreateTicketPage() {
       </Typography>
 
       <Box className="mb-8">
-        <TextField
-          fullWidth
-          placeholder="Assunto"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          className="mb-4"
-        />
-
         <TextField
           fullWidth
           placeholder="Descreva sua dúvida"
@@ -182,9 +171,6 @@ export default function CreateTicketPage() {
         {tickets.map((ticket) => (
           <Paper key={ticket.ticketId} className="p-4 shadow-sm">
             <Box className="flex justify-between items-center mb-2">
-              <Typography className="font-bold text-black">
-                {ticket.subject}
-              </Typography>
               <Box className="text-sm px-2 py-1 rounded bg-gray-200 text-gray-800">
                 {ticket.status}
               </Box>

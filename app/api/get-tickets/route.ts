@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const limit = Number(searchParams.get("limit") || "10");
     const lastKey = searchParams.get("lastKey");
-    const rawAreas = searchParams.getAll("area"); // múltiplas áreas
+    const rawAreas = searchParams.getAll("area");
+    const status = searchParams.get("status"); // ✅ novo filtro
 
     if (!rawAreas.length) {
       return NextResponse.json(
@@ -27,27 +28,38 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 🔧 construir FilterExpression dinâmica
+    // 🔧 construir FilterExpression dinâmica com áreas e status
     const areaFilters = rawAreas
       .map((_, index) => `#area = :a${index}`)
       .join(" OR ");
+
     const expressionAttrValues: Record<string, any> = {
       ":type": { S: "ticket" },
+    };
+
+    const expressionAttrNames: Record<string, string> = {
+      "#type": "type",
+      "#area": "area",
     };
 
     rawAreas.forEach((area, index) => {
       expressionAttrValues[`:a${index}`] = { S: area };
     });
 
+    let filterExpression = `(${areaFilters})`;
+
+    if (status) {
+      filterExpression += ` AND #status = :status`;
+      expressionAttrNames["#status"] = "status";
+      expressionAttrValues[":status"] = { S: status };
+    }
+
     const input: any = {
       TableName: "tickets",
       IndexName: "type-createdAt-index",
       KeyConditionExpression: "#type = :type",
-      FilterExpression: areaFilters,
-      ExpressionAttributeNames: {
-        "#type": "type",
-        "#area": "area",
-      },
+      FilterExpression: filterExpression,
+      ExpressionAttributeNames: expressionAttrNames,
       ExpressionAttributeValues: expressionAttrValues,
       ScanIndexForward: false,
       Limit: limit,
@@ -96,13 +108,13 @@ export async function GET(req: NextRequest) {
           ticketId: item.ticketId?.S ?? null,
           userId: userId ?? null,
           user: user,
-          subject: item.subject?.S ?? "",
           text: item.text?.S ?? "",
           status: item.status?.S ?? "Novo",
           createdAt: item.createdAt?.S ?? null,
           reply: item.reply?.S ?? null,
           lawyerName: item.lawyerName?.S ?? null,
           area: item.area?.S ?? null,
+          summary: item.summary?.S ?? null,
         };
       })
     );

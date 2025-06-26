@@ -16,12 +16,12 @@ const client = new DynamoDBClient({
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, subject, text } = await req.json();
+    const { userId, text } = await req.json();
 
     console.log("📥 [create-ticket] Dados recebidos:");
-    console.log({ userId, subject, text });
+    console.log({ userId, text });
 
-    if (!userId || !subject?.trim() || !text?.trim()) {
+    if (!userId || !text?.trim()) {
       return NextResponse.json(
         { success: false, error: "Preencha todos os campos." },
         { status: 400 }
@@ -35,11 +35,9 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ question: text }),
     });
 
-    const { area } = await classifyRes.json();
-    console.log(
-      "🏷️ [create-ticket] Área classificada via /api/classify:",
-      area
-    );
+    const { area, summary } = await classifyRes.json();
+
+    console.log("🏷️ [create-ticket] Classificação:", { area, summary });
 
     // ✅ Gera ID incremental
     const counter = await client.send(
@@ -62,9 +60,9 @@ export async function POST(req: NextRequest) {
     const ticketItem = {
       ticketId: { S: newId },
       userId: { S: userId },
-      subject: { S: subject.trim() },
       text: { S: text.trim() },
       area: { S: area || "Outro" },
+      summary: { S: summary || "" },
       status: { S: "Novo" },
       type: { S: "ticket" },
       createdAt: { S: new Date().toISOString() },
@@ -84,6 +82,7 @@ export async function POST(req: NextRequest) {
       success: true,
       id: newId,
       area,
+      summary,
       message: "Ticket criado com sucesso",
     });
   } catch (err: any) {

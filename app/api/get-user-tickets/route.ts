@@ -70,7 +70,6 @@ export async function GET(req: NextRequest) {
         return {
           ticketId: item.ticketId?.S ?? null,
           userId: item.userId?.S ?? null,
-          subject: item.subject?.S ?? "",
           text: item.text?.S ?? "",
           status: item.status?.S ?? "Novo",
           createdAt: item.createdAt?.S ?? null,

@@ -5,11 +5,11 @@ export type Ticket = {
     name: string;
     email: string;
   } | null;
-  subject: string;
   text: string;
   status: string;
   createdAt: string;
   reply: string | null;
   lawyerName: string | null;
-  area: string | null; // 👈 adicione essa linha
+  area: string | null;
+  summary: string | null;
 };

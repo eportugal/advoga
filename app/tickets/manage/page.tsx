@@ -7,12 +7,14 @@ import type { Ticket } from "@/app/types/Ticket";
 import {
   Button,
   Chip,
-  CircularProgress,
+  Select,
   Container,
   Typography,
   Box,
   Paper,
   Skeleton,
+  FormControl,
+  MenuItem,
 } from "@mui/material";
 
 function timeAgo(dateString: string) {
@@ -42,6 +44,8 @@ export default function TicketsManagePage() {
   const [showReplyField, setShowReplyField] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [practiceAreas, setPracticeAreas] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const ticketsStatus = ["Novo", "Em Aberto", "Fechado"];
 
   useEffect(() => {
     const loadDbUser = async () => {
@@ -71,7 +75,7 @@ export default function TicketsManagePage() {
     } else if (practiceAreas.length > 0) {
       loadTickets(true);
     }
-  }, [isAuthenticated, profile, practiceAreas]);
+  }, [isAuthenticated, profile, practiceAreas, statusFilter]);
 
   const loadTickets = async (initial = false) => {
     if (initial) {
@@ -91,6 +95,11 @@ export default function TicketsManagePage() {
       practiceAreas.forEach((area) => {
         params.append("area", area);
       });
+
+      // ✅ Adiciona o filtro de status se estiver definido
+      if (statusFilter) {
+        params.set("status", statusFilter);
+      }
 
       const res = await fetch(`/api/get-tickets?${params.toString()}`);
       const data = await res.json();
@@ -178,15 +187,38 @@ export default function TicketsManagePage() {
 
   return (
     <Box className="bg-gray-50 mt-16">
-      <Container maxWidth="lg" className="h-screen flex px-4">
+      <Container maxWidth="lg" className="flex px-4">
         <main className="flex-1 overflow-y-auto py-8">
           <Typography
             marginBottom={2}
             variant="h5"
             className="font-bold text-gray-800"
           >
-            Novos tickets
+            Consultorias
           </Typography>
+          <Box className="mb-4 flex gap-4 items-center">
+            <Typography className="text-sm text-slate-600">
+              Filtrar por status:
+            </Typography>
+            <FormControl size="small">
+              <Select
+                value={statusFilter ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setStatusFilter(value ? value : null); // null representa "Todos"
+                }}
+                displayEmpty
+                sx={{ minWidth: 150 }}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                {ticketsStatus.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
 
           <Box className="space-y-6">
             {isInitialLoading && (
@@ -230,41 +262,98 @@ export default function TicketsManagePage() {
               </Typography>
             )}
 
-            {tickets.map((ticket) => (
+            {tickets.map((ticket, index) => (
               <Paper
                 key={ticket.ticketId}
-                className="p-4 border border-gray-200 hover:shadow transition"
+                className="relative overflow-hidden rounded-3xl p-8 shadow-2xl transition-all duration-500 ease-out hover:shadow-3xl bg-white/95 backdrop-blur-xl border border-white/30"
+                style={{
+                  background: "rgba(255, 255, 255, 0.95)",
+                }}
               >
-                <Box className="flex justify-between">
-                  <Box>
-                    <Box className="flex items-center text-xs text-gray-500 mb-1 gap-2">
+                {/* Barra colorida animada no topo - só para status 'Novo' */}
+                {ticket.status === "Novo" && (
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4, #10b981, #f59e0b)",
+                      backgroundSize: "300% 100%",
+                    }}
+                  />
+                )}
+
+                <Box className="flex justify-between gap-8">
+                  <Box className="flex-1">
+                    {/* Header com status e informações */}
+                    <Box className="flex items-center mb-6 gap-4 flex-wrap">
                       <Chip
                         label={ticket.status}
                         size="small"
-                        className="bg-gray-200 text-gray-700"
+                        className="text-white font-bold uppercase"
+                        sx={{
+                          backgroundColor: "primary.main",
+                          color: "white",
+                          fontSize: "8px",
+                          letterSpacing: "1px",
+                          lineHeight: "1",
+                        }}
                       />
-                      <span>{timeAgo(ticket.createdAt)}</span>
-                      <span className="text-color-primary">
-                        {ticket.user?.email || "Usuário não identificado"}
-                      </span>
-                      <span className="text-color-primary">
-                        {ticket.area || "em branco"}
+                      {/* Tag da área */}
+                      <Chip
+                        label={ticket.area || "Área não definida"}
+                        size="small"
+                        variant="outlined"
+                        className="font-bold uppercase"
+                        sx={{
+                          color: "primary.main",
+                          fontSize: "8px",
+                          letterSpacing: "1px",
+                          borderColor: "primary.main",
+                          lineHeight: "1",
+                        }}
+                      />
+                      <span className="text-slate-500 font-medium text-sm">
+                        {timeAgo(ticket.createdAt)}
                       </span>
                     </Box>
 
-                    <Typography className="text-md font-bold text-green-700 mb-1">
-                      {ticket.subject}
+                    {/* Descrição */}
+                    <Typography className="text-slate-600 text-base leading-relaxed mb-6">
+                      {ticket.summary}
                     </Typography>
 
-                    <Typography className="text-sm text-gray-500 italic break-words">
-                      {ticket.text}
-                    </Typography>
-
-                    <Typography className="text-sm text-gray-700">
-                      {ticket.user?.name || "Nome não disponível"}
-                    </Typography>
+                    {/* Informações do cliente */}
+                    <div className="flex items-center gap-4 pt-6 border-t-2 border-dashed border-slate-200 mt-8">
+                      {/* Avatar com iniciais */}
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-400 text-white font-bold text-lg shadow-sm">
+                        <p className="text-sm">
+                          {ticket.user?.name
+                            ? ticket.user.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)
+                            : "UN"}
+                        </p>
+                      </div>
+                      <div className="flex flex-col">
+                        <Typography className="font-semibold text-slate-800">
+                          {ticket.user?.name || "Nome não disponível"}
+                        </Typography>
+                        <Typography
+                          className="text-slate-500 text-xs"
+                          sx={{
+                            fontSize: "12px",
+                          }}
+                        >
+                          {ticket.user?.email || "Email não disponível"}
+                        </Typography>
+                      </div>
+                    </div>
                   </Box>
 
+                  {/* Botão responder */}
                   <Button
                     variant="contained"
                     size="small"
@@ -272,7 +361,7 @@ export default function TicketsManagePage() {
                       setSelectedTicket(ticket);
                       setReplyText("");
                     }}
-                    className="text-xs h-10"
+                    className="relative overflow-hidden h-12"
                   >
                     Responder
                   </Button>
@@ -281,16 +370,20 @@ export default function TicketsManagePage() {
             ))}
 
             {lastKey && !isInitialLoading && (
-              <Button
-                onClick={() => loadTickets(false)}
-                disabled={loading}
-                variant="contained"
-                color="success"
-                size="small"
-                className="mt-8 text-xs"
-              >
-                {loading ? "Carregando..." : "Ver mais"}
-              </Button>
+              <Container className="flex justify-center items-center">
+                <Button
+                  onClick={() => loadTickets(false)}
+                  disabled={loading}
+                  variant="outlined"
+                  size="small"
+                  className="mt-8 text-xs h-10"
+                  sx={{
+                    color: "primary.main",
+                  }}
+                >
+                  {loading ? "Carregando..." : "Ver mais"}
+                </Button>
+              </Container>
             )}
           </Box>
         </main>

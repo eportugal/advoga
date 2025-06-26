@@ -15,21 +15,22 @@ export async function POST(req: NextRequest) {
   if (!question || typeof question !== "string") {
     return new Response(
       JSON.stringify({ error: "Missing or invalid question" }),
-      {
-        status: 400,
-      }
+      { status: 400 }
     );
   }
 
   const prompt = `
-  Classifique a seguinte dúvida jurídica em uma das seguintes áreas:
-  "Direito de Família", "Direito Penal", "Direito Civil", "Direito Trabalhista", 
-  "Direito Previdenciário", "Direito Tributário", "Direito Empresarial", "Outro".
+Classifique a seguinte dúvida jurídica em uma das seguintes áreas:
+"Direito de Família", "Direito Penal", "Direito Civil", "Direito Trabalhista", 
+"Direito Previdenciário", "Direito Tributário", "Direito Empresarial", "Outro".
 
-  Dúvida: "${question}"
+Depois, gere um resumo breve da dúvida (1 ou 2 frases no máximo).
 
-  Responda apenas com o nome da área.
-  `;
+Retorne no formato JSON puro, sem explicações, assim:
+{ "area": "Área escolhida", "summary": "Resumo gerado" }
+
+Dúvida: "${question}"
+`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -38,19 +39,30 @@ export async function POST(req: NextRequest) {
       temperature: 0,
     });
 
-    const area = response.choices[0].message.content?.trim();
-    console.log("🏷️ [API] Classified area:", area);
+    const raw = response.choices[0].message.content?.trim() || "";
 
-    return new Response(JSON.stringify({ area }), {
+    // Limpeza de crases e blocos de código
+    const cleaned = raw
+      .replace(/^```json/, "")
+      .replace(/^```/, "")
+      .replace(/```$/, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned);
+    console.log("✅ [API] Parsed response:", parsed);
+
+    return new Response(JSON.stringify(parsed), {
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ [API] Error occurred:", error);
 
-    const message = error instanceof Error ? error.message : String(error);
-
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Failed to parse AI response",
+        raw: error?.response?.choices?.[0]?.message?.content || error?.message,
+      }),
+      { status: 500 }
+    );
   }
 }

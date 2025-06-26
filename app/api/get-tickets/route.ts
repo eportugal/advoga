@@ -16,7 +16,7 @@ const client = new DynamoDBClient({
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const limit = Number(searchParams.get("limit") || "10");
+    const limit = Number(searchParams.get("limit") || "20");
     const lastKey = searchParams.get("lastKey");
     const rawAreas = searchParams.getAll("area");
     const status = searchParams.get("status"); // ✅ novo filtro

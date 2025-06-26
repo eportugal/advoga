@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { CheckCircle, Sparkles, Send, MessageCircle, Plus } from "lucide-react";
 import NavBar from "./components/NavBar";
-import Link from "next/link";
+import ErrorModal from "./components/ErrorModal";
 
 export default function LandingPage() {
+  const { isAuthenticated, dbUser, isLoading } = useAuth();
   const router = useRouter();
-  const { isAuthenticated, dbUser, isLoading, profile, signOut } = useAuth();
+
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [summary, setSummary] = useState("");
@@ -19,10 +20,12 @@ export default function LandingPage() {
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [loadingAnswer, setLoadingAnswer] = useState(false);
   const [success, setSuccess] = useState(false);
-  const fullName =
-    dbUser?.firstName && dbUser?.lastName
-      ? `${dbUser.firstName} ${dbUser.lastName}`
-      : "Usuário";
+
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [modalReason, setModalReason] = useState<"ia" | "ticket" | null>(null);
+
+  const creditsIA = Number(dbUser?.creditsIA ?? 0);
+  const creditsConsultoria = Number(dbUser?.creditsConsultoria ?? 0);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && dbUser) {
@@ -34,18 +37,18 @@ export default function LandingPage() {
     }
   }, [isAuthenticated, dbUser, isLoading, router]);
 
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace("/");
-    }
-  }, [isAuthenticated, isLoading, router]);
-
   const handleCTA = () => {
     router.push("/signup/regular");
   };
 
   const handleSubmit = async () => {
     if (!question.trim() || !dbUser?.id) return;
+
+    if (creditsIA <= 0) {
+      setModalReason("ia");
+      setShowCreditsModal(true);
+      return;
+    }
 
     setLoadingAnswer(true);
     setAnswer("");
@@ -79,7 +82,14 @@ export default function LandingPage() {
   };
 
   const handleCreateTicket = async () => {
+    if (creditsConsultoria <= 0) {
+      setModalReason("ticket");
+      setShowCreditsModal(true);
+      return;
+    }
+
     if (!question || !summary || !area || !answer || !dbUser?.id) return;
+
     try {
       const res = await fetch("/api/create-ticket", {
         method: "POST",
@@ -147,8 +157,7 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 mt-6">
               <button
                 onClick={handleSubmit}
-                disabled={loadingAnswer}
-                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-xl disabled:opacity-50 flex items-center justify-center space-x-2"
+                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-xl flex items-center justify-center space-x-2"
               >
                 {loadingAnswer ? (
                   <>
@@ -162,6 +171,7 @@ export default function LandingPage() {
                   </>
                 )}
               </button>
+
               <button
                 onClick={handleCTA}
                 className="flex-1 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-semibold text-lg text-center border border-white/20 transition-all duration-300"
@@ -200,6 +210,23 @@ export default function LandingPage() {
           </div>
         </div>
       </div>
+
+      <ErrorModal
+        open={showCreditsModal}
+        title="Créditos insuficientes"
+        message={
+          modalReason === "ia"
+            ? "Você usou todos os seus créditos de consulta com IA. Para continuar obtendo respostas instantâneas, adicione novos créditos ao seu plano."
+            : "Você precisa de créditos de consultoria para transformar essa dúvida em ticket."
+        }
+        onClose={() => setShowCreditsModal(false)}
+        onConfirm={() => {
+          setShowCreditsModal(false);
+          router.push("/signup/regular");
+        }}
+        confirmText="Adicionar Créditos"
+        cancelText="Fechar"
+      />
 
       <style jsx global>{`
         @keyframes fade-in {

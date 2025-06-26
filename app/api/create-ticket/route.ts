@@ -4,6 +4,7 @@ import {
   UpdateItemCommand,
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { decreaseCredit } from "../../utils/decreaseCredit"; // 👈 Reaproveita helper
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION,
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     } = await req.json();
 
     console.log("📥 [create-ticket] Dados recebidos:");
-    console.log({ userId, text, area, summary, answerIA, type });
+    console.log({ userId, text, area, summary, explanation, answerIA });
 
     if (!userId || !text?.trim() || !area || !summary || !explanation) {
       return NextResponse.json(
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Gera ID incremental
+    // 🔢 Gera ID incremental
     const counter = await client.send(
       new UpdateItemCommand({
         TableName: "counters",
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    const newId = counter.Attributes!.currentValue.N;
+    const newId = counter.Attributes?.currentValue?.N;
     if (!newId) throw new Error("Falha ao gerar ID do ticket");
 
     const ticketItem: Record<string, any> = {
@@ -69,12 +70,22 @@ export async function POST(req: NextRequest) {
       ticketItem.answerIA = { S: answerIA };
     }
 
+    // 🧾 Cria o ticket
     await client.send(
       new PutItemCommand({
         TableName: "tickets",
         Item: ticketItem,
       })
     );
+
+    // 💳 Decrementa 1 crédito de consultoria
+    const result = await decreaseCredit({ userId, type: "consultoria" });
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error || "Erro ao debitar crédito." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
           firstName: user.firstName?.S ?? null,
           lastName: user.lastName?.S ?? null,
           practiceAreas: user.practiceAreas?.L?.map((item) => item.S) ?? [],
+          creditsIA: user.creditsIA?.N ?? "0",
+          creditsConsultoria: user.creditsConsultoria?.N ?? "0",
         },
       });
     }

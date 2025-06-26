@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
-    const limit = Number(searchParams.get("limit") || "10");
+    const limit = Number(searchParams.get("limit") || "20");
     const lastKey = searchParams.get("lastKey");
 
     if (!userId) {

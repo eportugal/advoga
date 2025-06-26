@@ -87,7 +87,7 @@ export default function TicketsManagePage() {
 
     try {
       const params = new URLSearchParams();
-      params.set("limit", "5");
+      params.set("limit", "20");
 
       if (!initial && lastKey) params.set("lastKey", lastKey);
 

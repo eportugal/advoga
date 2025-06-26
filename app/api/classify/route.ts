@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import * as cheerio from "cheerio";
+import { decreaseCredit } from "../../utils/decreaseCredit"; // 👈 Importa helper
 
 const openai = new OpenAI({
   apiKey: process.env.MISTRAL_API_KEY,
@@ -47,11 +48,11 @@ Classifique a seguinte dúvida jurídica em uma das seguintes áreas:
 "Direito Previdenciário", "Direito Tributário", "Direito Empresarial", "Outro".
 
 Depois, gere:
-1. Um breve resumo da dúvida para ser mostrado ao usuário. Apenas para que fique fácil ele reconhecer o assunto numa página com vários tickets;
-2. Uma breve explicação técnica resumida sobre a dúvida, como se fosse para outro advogado entender rapidamente o contexto. Sem fazer inferências, só descrever o que o cliente disse;
-3. Uma resposta útil e completa à dúvida com base nas informações abaixo.
+1. Um breve resumo da dúvida para ser mostrado ao usuário;
+2. Uma explicação técnica resumida;
+3. Uma resposta útil e completa com base nas fontes abaixo.
 
-Use o seguinte formato JSON (sem texto extra, sem comentários, apenas o JSON puro):
+Use este formato JSON (sem texto extra):
 
 {
   "area": "Área jurídica",
@@ -75,12 +76,11 @@ ${webContext}
 
     const raw = completion.choices[0].message.content?.trim() || "";
 
-    // 💡 Limpeza robusta para qualquer formato com crase, aspas ou newline
     const cleaned = raw
-      .replace(/(^```json|```$|^```)/g, "") // remove blocos de código
-      .replace(/\\n/g, "\n") // transforma '\n' em quebras de linha reais
-      .replace(/\\"/g, '"') // corrige aspas escapadas
-      .replace(/\n/g, "") // remove quebras de linha finais
+      .replace(/(^```json|```$|^```)/g, "")
+      .replace(/\\n/g, "\n")
+      .replace(/\\"/g, '"')
+      .replace(/\n/g, "")
       .trim();
 
     let parsed;
@@ -91,14 +91,26 @@ ${webContext}
         {
           success: false,
           error: "A resposta da IA não está em formato JSON válido.",
-          raw: raw,
-          cleaned: cleaned, // 🔍 para debugging
+          raw,
+          cleaned,
         },
         { status: 500 }
       );
     }
 
     console.log("🧠 Resposta parseada:", parsed);
+
+    // ✅ Decrementa 1 crédito IA
+    const result = await decreaseCredit({ userId, type: "ia" });
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.error || "Erro ao debitar crédito IA.",
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

@@ -33,7 +33,7 @@ export default function AlertModal({
       display="flex"
       alignItems="center"
       justifyContent="center"
-      bgcolor="rgba(0, 0, 0, 0.2)"
+      bgcolor="rgba(0, 0, 0, 0.6)"
     >
       <Paper
         className="flex flex-col items-center justify-center"

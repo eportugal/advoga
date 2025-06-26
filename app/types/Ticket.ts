@@ -1,8 +1,6 @@
-// app/types/Ticket.ts
-
 export type Ticket = {
   ticketId: string;
-  userId?: string; // se usar para mapear dono
+  userId: string | null;
   user: {
     name: string;
     email: string;
@@ -10,8 +8,8 @@ export type Ticket = {
   subject: string;
   text: string;
   status: string;
-  reply?: string;
-  lawyerName?: string;
   createdAt: string;
-  respondedAt?: string;
+  reply: string | null;
+  lawyerName: string | null;
+  area: string | null; // 👈 adicione essa linha
 };

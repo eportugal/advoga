@@ -41,6 +41,7 @@ export default function TicketsManagePage() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showReplyField, setShowReplyField] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [practiceAreas, setPracticeAreas] = useState<string[]>([]);
 
   useEffect(() => {
     const loadDbUser = async () => {
@@ -56,6 +57,7 @@ export default function TicketsManagePage() {
       const data = await res.json();
       if (data.success && data.user) {
         setDbUserId(data.user.id);
+        setPracticeAreas(data.user.practiceAreas || []);
       }
     };
 
@@ -66,10 +68,10 @@ export default function TicketsManagePage() {
     if (!isAuthenticated) return;
     if (profile !== "advogado") {
       router.replace("/");
-    } else {
+    } else if (practiceAreas.length > 0) {
       loadTickets(true);
     }
-  }, [isAuthenticated, profile, router]);
+  }, [isAuthenticated, profile, practiceAreas]);
 
   const loadTickets = async (initial = false) => {
     if (initial) {
@@ -82,7 +84,13 @@ export default function TicketsManagePage() {
     try {
       const params = new URLSearchParams();
       params.set("limit", "5");
+
       if (!initial && lastKey) params.set("lastKey", lastKey);
+
+      // Adiciona filtros de áreas
+      practiceAreas.forEach((area) => {
+        params.append("area", area);
+      });
 
       const res = await fetch(`/api/get-tickets?${params.toString()}`);
       const data = await res.json();
@@ -186,7 +194,7 @@ export default function TicketsManagePage() {
                 {[...Array(3)].map((_, i) => (
                   <Paper
                     key={i}
-                    className=" border p-4 border-gray-200 hover:shadow transition"
+                    className="border p-4 border-gray-200 hover:shadow transition"
                   >
                     <Box className="mb-2 flex justify-between gap-2">
                       <Box width="88%">
@@ -237,7 +245,10 @@ export default function TicketsManagePage() {
                       />
                       <span>{timeAgo(ticket.createdAt)}</span>
                       <span className="text-color-primary">
-                        {ticket.user?.email}
+                        {ticket.user?.email || "Usuário não identificado"}
+                      </span>
+                      <span className="text-color-primary">
+                        {ticket.area || "em branco"}
                       </span>
                     </Box>
 
@@ -250,7 +261,7 @@ export default function TicketsManagePage() {
                     </Typography>
 
                     <Typography className="text-sm text-gray-700">
-                      {ticket.user?.name}
+                      {ticket.user?.name || "Nome não disponível"}
                     </Typography>
                   </Box>
 

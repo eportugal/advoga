@@ -2,7 +2,6 @@
 
 import React from "react";
 
-// IMPORTA O MESMO TIPO Ticket:
 type Ticket = {
   ticketId: string;
   user: {
@@ -13,10 +12,11 @@ type Ticket = {
   text: string;
   status: string;
   createdAt: string;
+  area: string | null;
 };
 
 type TicketModalProps = {
-  ticket: Ticket; // <- Agora o mesmo tipo!
+  ticket: Ticket;
   replyText: string;
   showReplyField: boolean;
   onClose: () => void;
@@ -54,6 +54,13 @@ export default function TicketModal({
           <p className="text-gray-600 mb-1">Assunto</p>
           <h3 className="font-semibold text-gray-700">{ticket.subject}</h3>
         </div>
+
+        {ticket.area && (
+          <div className="mb-4">
+            <p className="text-gray-600 mb-1">Área de atuação</p>
+            <p className="font-semibold text-blue-700">{ticket.area}</p>
+          </div>
+        )}
 
         <div className="mb-4">
           <p className="text-gray-600 mb-1">Descrição</p>

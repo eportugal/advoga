@@ -21,7 +21,8 @@ import {
 } from "@mui/material";
 import { CheckCircle, Eye, EyeOff } from "lucide-react";
 import ConfirmationCodeInput from "../components/ConfirmationCodeInput";
-import { blueGrey } from "@mui/material/colors";
+import AlertModal from "../components/AlertModal";
+import confetti from "canvas-confetti";
 
 Amplify.configure(outputs);
 
@@ -29,7 +30,6 @@ export default function AuthFlow() {
   const router = useRouter();
   const { signUp, confirmSignUp, signIn, resendConfirmationCode, isLoading } =
     useAuth();
-
   const [step, setStep] = useState<"login" | "signup" | "confirm">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,10 +45,26 @@ export default function AuthFlow() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    if (showModal) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    }
+  }, [showModal]);
 
   const resetMessages = () => {
     setError("");
     setSuccess("");
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    router.push("/");
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -69,14 +85,10 @@ export default function AuthFlow() {
     }
   };
 
-  if (loginLoading || loginSuccess) {
+  if (loginLoading && !showModal) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
-        {loginSuccess ? (
-          <CheckCircle size={60} color="green" />
-        ) : (
-          <CircularProgress size={60} thickness={5} color="primary" />
-        )}
+        <CircularProgress size={60} thickness={5} color="primary" />
       </div>
     );
   }
@@ -120,6 +132,35 @@ export default function AuthFlow() {
     }
   };
 
+  const finalizeLogin = async () => {
+    try {
+      setLoginLoading(true);
+      const cleanEmail = email.toLowerCase().trim();
+
+      const signInRes = await signIn(cleanEmail, password);
+      if (!signInRes.success) throw new Error(signInRes.message);
+
+      const currentUser = await getCurrentUser();
+      if (userId) {
+        await fetch("/api/update-user-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: userId,
+            status: "active",
+            cognitoSub: currentUser.userId,
+          }),
+        });
+      }
+
+      router.push("/");
+    } catch (err: any) {
+      setError(err.message || "Erro inesperado");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     setConfirmLoading(true);
@@ -131,24 +172,9 @@ export default function AuthFlow() {
         confirmationCode.trim()
       );
       if (!confirmRes.success) throw new Error(confirmRes.message);
-      const signInRes = await signIn(cleanEmail, password);
-      if (!signInRes.success) throw new Error(signInRes.message);
-      if (userId) {
-        const currentUser = await getCurrentUser();
-        await fetch("/api/update-user-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: userId,
-            status: "active",
-            cognitoSub: currentUser.userId,
-          }),
-        });
-      }
+
       setConfirmSuccess(true);
-      setTimeout(() => {
-        router.push("/");
-      }, 1000); // só para dar tempo de ver o check
+      setShowModal(true); // Mostra o modal, mas login será feito ao clicar no botão
     } catch (err: any) {
       setError(err.message || "Erro inesperado");
     } finally {
@@ -191,12 +217,10 @@ export default function AuthFlow() {
           <Typography variant="h4" fontWeight={700} gutterBottom>
             Comece sua jornada com a gente.
           </Typography>
-
           <Typography variant="body1" sx={{ maxWidth: 400, mb: 6 }}>
             Descubra a melhor comunidade de advogados e clientes para resolver
             seus problemas jurídicos com confiança.
           </Typography>
-
           <Paper
             elevation={6}
             sx={{
@@ -220,12 +244,10 @@ export default function AuthFlow() {
 
         <Grid size={6} className="min-h-[80vh]">
           <Paper
-            className="bg-white shadow-md p-8 min-h-[80vh] flex flex-col"
-            sx={{
-              borderRadius: 4,
-            }}
+            className="bg-white shadow-md px-8 min-h-[80vh] flex flex-col items-center justify-center"
+            sx={{ borderRadius: 4 }}
           >
-            <Box marginTop={8} textAlign="center">
+            <Box textAlign="center">
               <Typography
                 variant="h5"
                 fontWeight={700}
@@ -244,7 +266,7 @@ export default function AuthFlow() {
               <Box
                 component="form"
                 onSubmit={handleLogin}
-                className="mt-4 space-y-6"
+                className="mt-4 space-y-4"
               >
                 <TextField
                   fullWidth
@@ -276,8 +298,6 @@ export default function AuthFlow() {
                     ),
                   }}
                 />
-
-                {/* ✅ BOTÃO AJUSTADO */}
                 <Button
                   type="submit"
                   fullWidth
@@ -297,8 +317,11 @@ export default function AuthFlow() {
                     ? "Entrando..."
                     : "Entrar"}
                 </Button>
-
-                <Typography align="center">
+                <Typography
+                  align="center"
+                  fontSize={12}
+                  className="text-gray-500"
+                >
                   Não tem uma conta?{" "}
                   <Link component="button" onClick={() => setStep("signup")}>
                     Criar uma
@@ -312,7 +335,7 @@ export default function AuthFlow() {
                 component="form"
                 onSubmit={handleSignUp}
                 noValidate
-                className="mt-4 space-y-6"
+                className="mt-4 space-y-4"
               >
                 <TextField
                   fullWidth
@@ -384,7 +407,6 @@ export default function AuthFlow() {
                   loading={loading}
                   email={email}
                 />
-
                 <Button
                   className="mt-8"
                   type="submit"
@@ -421,6 +443,12 @@ export default function AuthFlow() {
           </Paper>
         </Grid>
       </Grid>
+
+      <AlertModal
+        open={showModal}
+        loading={loginLoading}
+        onConfirm={finalizeLogin}
+      />
     </Container>
   );
 }

@@ -8,7 +8,7 @@ const theme = createTheme({
       main: "#005EFB",
     },
     secondary: {
-      main: "#19857b",
+      main: "#00ABFA",
     },
     error: {
       main: "#f44336",
@@ -23,10 +23,6 @@ const theme = createTheme({
     h5: {
       fontWeight: 600,
       fontSize: "1.4rem",
-    },
-    button: {
-      textTransform: "none",
-      fontWeight: 500,
     },
   },
   shape: {

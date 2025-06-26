@@ -45,12 +45,14 @@ export default function NavBar() {
           <Grid>
             <Box className="flex items-center space-x-4">
               {profile === "advogado" && (
-                <Link
+                <Button
+                  className="h-2"
+                  variant="contained"
+                  size="small"
                   href="/tickets/manage"
-                  className="text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition"
                 >
                   Painel do Advogado
-                </Link>
+                </Button>
               )}
 
               {isAuthenticated && profile === "regular" && (

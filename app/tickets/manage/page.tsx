@@ -291,13 +291,19 @@ export default function TicketsManagePage() {
                         size="small"
                         className="text-white font-bold uppercase"
                         sx={{
-                          backgroundColor: "primary.main",
+                          backgroundColor:
+                            ticket.status === "Novo"
+                              ? "primary.main"
+                              : ticket.status === "Em Aberto"
+                              ? "warning.main"
+                              : "success.main", // Concluído
                           color: "white",
                           fontSize: "8px",
                           letterSpacing: "1px",
                           lineHeight: "1",
                         }}
                       />
+
                       {/* Tag da área */}
                       <Chip
                         label={ticket.area || "Área não definida"}
@@ -363,7 +369,7 @@ export default function TicketsManagePage() {
                     }}
                     className="relative overflow-hidden h-12"
                   >
-                    Responder
+                    Ver detalhes
                   </Button>
                 </Box>
               </Paper>

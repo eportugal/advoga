@@ -4,16 +4,19 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
-import { CheckCircle, Sparkles, Send, MessageCircle } from "lucide-react";
+import { CheckCircle, Sparkles, Send, MessageCircle, Plus } from "lucide-react";
 import NavBar from "./components/NavBar";
 import Link from "next/link";
-import { Scale, LogOut, User } from "lucide-react";
 
 export default function LandingPage() {
   const router = useRouter();
   const { isAuthenticated, dbUser, isLoading, profile, signOut } = useAuth();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [summary, setSummary] = useState("");
+  const [area, setArea] = useState("");
+  const [explanation, setExplanation] = useState("");
+  const [ticketId, setTicketId] = useState<string | null>(null);
   const [loadingAnswer, setLoadingAnswer] = useState(false);
   const [success, setSuccess] = useState(false);
   const fullName =
@@ -21,7 +24,6 @@ export default function LandingPage() {
       ? `${dbUser.firstName} ${dbUser.lastName}`
       : "Usuário";
 
-  // ✅ Redireciona usando dbUser
   useEffect(() => {
     if (!isLoading && isAuthenticated && dbUser) {
       if (dbUser.role === "regular") {
@@ -34,7 +36,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.replace("/"); // já logado → home
+      router.replace("/");
     }
   }, [isAuthenticated, isLoading, router]);
 
@@ -43,30 +45,31 @@ export default function LandingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!question.trim()) return;
+    if (!question.trim() || !dbUser?.id) return;
+
     setLoadingAnswer(true);
     setAnswer("");
+    setSummary("");
+    setArea("");
+    setExplanation("");
+    setTicketId(null);
     setSuccess(false);
 
     try {
-      const res = await fetch("/api/ask-mistral", {
+      const res = await fetch("/api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, userId: dbUser.id }),
       });
 
-      if (!res.body) throw new Error("No response body");
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let done = false;
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunk = decoder.decode(value);
-        setAnswer((prev) => prev + chunk);
-      }
+      setAnswer(data.answerIA);
+      setSummary(data.summary);
+      setExplanation(data.explanation);
+      setArea(data.area);
+      setTicketId(data.ticketId);
       setSuccess(true);
     } catch (err) {
       console.error("Erro:", err);
@@ -75,10 +78,33 @@ export default function LandingPage() {
     }
   };
 
+  const handleCreateTicket = async () => {
+    if (!question || !summary || !area || !answer || !dbUser?.id) return;
+    try {
+      const res = await fetch("/api/create-ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: dbUser.id,
+          text: question,
+          area,
+          summary,
+          explanation,
+          answerIA: answer,
+          type: "ticket",
+        }),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error);
+      alert("Ticket criado com sucesso!");
+    } catch (err) {
+      console.error("Erro ao criar ticket:", err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden">
       <NavBar />
-
       <div className="absolute inset-0 opacity-20">
         <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400 rounded-full filter blur-3xl animate-pulse"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-400 rounded-full filter blur-3xl animate-pulse"></div>
@@ -162,6 +188,13 @@ export default function LandingPage() {
                 <div className="text-white/90 leading-relaxed">
                   <ReactMarkdown>{answer}</ReactMarkdown>
                 </div>
+                <button
+                  onClick={handleCreateTicket}
+                  className="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl text-lg font-medium flex justify-center items-center space-x-2"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span>Transformar em Ticket</span>
+                </button>
               </div>
             )}
           </div>

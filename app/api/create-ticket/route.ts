@@ -1,4 +1,3 @@
-// ✅ app/api/create-ticket/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import {
   DynamoDBClient,
@@ -16,30 +15,27 @@ const client = new DynamoDBClient({
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, text } = await req.json();
+    const {
+      userId,
+      text,
+      area,
+      summary,
+      explanation,
+      answerIA,
+      type = "ticket",
+    } = await req.json();
 
     console.log("📥 [create-ticket] Dados recebidos:");
-    console.log({ userId, text });
+    console.log({ userId, text, area, summary, answerIA, type });
 
-    if (!userId || !text?.trim()) {
+    if (!userId || !text?.trim() || !area || !summary || !explanation) {
       return NextResponse.json(
-        { success: false, error: "Preencha todos os campos." },
+        { success: false, error: "Faltando campos obrigatórios" },
         { status: 400 }
       );
     }
 
-    // ✅ Chamada para a rota interna /api/classify
-    const classifyRes = await fetch("http://localhost:3000/api/classify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: text }),
-    });
-
-    const { area, summary } = await classifyRes.json();
-
-    console.log("🏷️ [create-ticket] Classificação:", { area, summary });
-
-    // ✅ Gera ID incremental
+    // Gera ID incremental
     const counter = await client.send(
       new UpdateItemCommand({
         TableName: "counters",
@@ -57,19 +53,21 @@ export async function POST(req: NextRequest) {
     const newId = counter.Attributes!.currentValue.N;
     if (!newId) throw new Error("Falha ao gerar ID do ticket");
 
-    const ticketItem = {
+    const ticketItem: Record<string, any> = {
       ticketId: { S: newId },
       userId: { S: userId },
       text: { S: text.trim() },
-      area: { S: area || "Outro" },
-      summary: { S: summary || "" },
+      area: { S: area },
+      summary: { S: summary },
+      explanation: { S: explanation },
+      type: { S: type },
       status: { S: "Novo" },
-      type: { S: "ticket" },
       createdAt: { S: new Date().toISOString() },
     };
 
-    console.log("📝 [create-ticket] Ticket salvo no DynamoDB:");
-    console.log(ticketItem);
+    if (answerIA) {
+      ticketItem.answerIA = { S: answerIA };
+    }
 
     await client.send(
       new PutItemCommand({
@@ -81,8 +79,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       id: newId,
-      area,
-      summary,
       message: "Ticket criado com sucesso",
     });
   } catch (err: any) {

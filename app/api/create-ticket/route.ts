@@ -5,6 +5,8 @@ import {
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { decreaseCredit } from "../../utils/decreaseCredit";
+import { createReminderSchedule } from "../../utils/scheduleReminder";
+
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION,
@@ -116,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     const { appointmentId, jitsiLink } = appointmentData;
 
-    // 🔢 Gera ID incremental
+    // 🔢 Gera ID incremental do ticket
     const counter = await client.send(
       new UpdateItemCommand({
         TableName: "counters",
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest) {
       ticketItem.answerIA = { S: answerIA };
     }
 
-    // 🧾 Cria o ticket
+    // 🧾 Criar o ticket
     await client.send(
       new PutItemCommand({
         TableName: "tickets",
@@ -163,7 +165,7 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // 💳 Decrementa 1 crédito de consultoria
+    // 💳 Decrementa crédito
     const result = await decreaseCredit({ userId, type: "consultoria" });
     if (!result.success) {
       return NextResponse.json(

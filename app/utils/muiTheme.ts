@@ -1,4 +1,3 @@
-// app/theme.ts
 import { createTheme } from "@mui/material/styles";
 
 const theme = createTheme({
@@ -33,12 +32,38 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           color: "#fff",
-          paddingTop: "1rem",
-          paddingBottom: "1rem",
+          textTransform: "none",
+          fontWeight: 500,
+          borderRadius: "12px",
           paddingLeft: "1.25rem",
           paddingRight: "1.25rem",
-          textTransform: "none",
+          minWidth: "64px",
         },
+        sizeSmall: {
+          height: "44px",
+          fontSize: "0.75rem",
+          paddingLeft: "18px",
+          paddingRight: "18px",
+        },
+        sizeMedium: {
+          height: "56px",
+          fontSize: "0.875rem",
+          paddingLeft: "24px",
+          paddingRight: "24px",
+        },
+        sizeLarge: {
+          height: "64px",
+          fontSize: "1rem",
+          paddingLeft: "32px",
+          paddingRight: "32px",
+        },
+        outlined: ({ theme }) => ({
+          color: theme.palette.primary.main,
+          border: `1px solid ${theme.palette.primary.main}`,
+          "&:hover": {
+            backgroundColor: "rgba(0, 94, 251, 0.08)",
+          },
+        }),
       },
     },
     MuiPaper: {

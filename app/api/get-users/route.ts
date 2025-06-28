@@ -10,6 +10,16 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const roleFilter = searchParams.get("role"); // ex: lawyer
+    const rawArea = searchParams.get("area"); // ex: Direito-de-Familia
+
+    const normalize = (str: string) =>
+      str
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // remove acentos
+        .replace(/-/g, " "); // troca hífen por espaço
+
+    const areaFilter = rawArea ? normalize(rawArea) : null;
 
     const res = await client.send(
       new ScanCommand({
@@ -24,13 +34,20 @@ export async function GET(req: NextRequest) {
       status: user.status?.S ?? "active",
       firstName: user.firstName?.S ?? null,
       lastName: user.lastName?.S ?? null,
-      practiceAreas: user.practiceAreas?.L?.map((a) => a.S) ?? [],
+      practiceAreas: user.practiceAreas?.L?.map((a) => a.S ?? "") ?? [],
     }));
 
-    // 🔍 Aplica filtro por role (se informado)
-    const filteredUsers = roleFilter
-      ? users.filter((u) => u.role === roleFilter)
-      : users;
+    let filteredUsers = users;
+
+    if (roleFilter) {
+      filteredUsers = filteredUsers.filter((u) => u.role === roleFilter);
+    }
+
+    if (areaFilter) {
+      filteredUsers = filteredUsers.filter((u) =>
+        u.practiceAreas.some((area) => normalize(area ?? "") === areaFilter)
+      );
+    }
 
     return NextResponse.json({
       success: true,

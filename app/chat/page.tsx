@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useAuth } from "./hooks/useAuth";
+import React, { useState } from "react";
+import { useAuth } from "../hooks/useAuth";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { CheckCircle, Sparkles, Send, MessageCircle, Plus } from "lucide-react";
-import NavBar from "./components/navbar/NavBar";
-import ErrorModal from "./components/modal/ErrorModal";
+import ErrorModal from "../components/modal/ErrorModal";
+import ScheduleModal from "../components/modal/ScheduleModal";
 
 export default function LandingPage() {
   const { isAuthenticated, dbUser, isLoading } = useAuth();
@@ -24,22 +24,13 @@ export default function LandingPage() {
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [modalReason, setModalReason] = useState<"ia" | "ticket" | null>(null);
 
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [availableTimes, setAvailableTimes] = useState<
+    { day: string; hour: string }[]
+  >([]);
+
   const creditsIA = Number(dbUser?.creditsIA ?? 0);
   const creditsConsultoria = Number(dbUser?.creditsConsultoria ?? 0);
-
-  useEffect(() => {
-    if (!isLoading && isAuthenticated && dbUser) {
-      if (dbUser.role === "regular") {
-        router.replace("/");
-      } else if (dbUser.role === "advogado") {
-        router.replace("/tickets/manage");
-      }
-    }
-  }, [isAuthenticated, dbUser, isLoading, router]);
-
-  const handleCTA = () => {
-    router.push("/signup/regular");
-  };
 
   const handleSubmit = async () => {
     if (!question.trim() || !dbUser?.id) return;
@@ -81,46 +72,78 @@ export default function LandingPage() {
     }
   };
 
-  const handleCreateTicket = async () => {
+  const handleCreateTicketClick = async () => {
     if (creditsConsultoria <= 0) {
       setModalReason("ticket");
       setShowCreditsModal(true);
       return;
     }
 
-    if (!question || !summary || !area || !answer || !dbUser?.id) return;
+    try {
+      const res = await fetch("/api/get-available-lawyers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ area }),
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      const uniqueTimes: Set<string> = new Set();
+      const times: { day: string; hour: string }[] = [];
+      data.lawyers.forEach((lawyer: any) => {
+        const availability = lawyer.availability || {};
+        (Object.entries(availability) as [string, string[]][]).forEach(
+          ([day, hours]) => {
+            hours.forEach((hour) => {
+              const key = `${day}-${hour}`;
+              if (!uniqueTimes.has(key)) {
+                uniqueTimes.add(key);
+                times.push({ day, hour });
+              }
+            });
+          }
+        );
+      });
+
+      setAvailableTimes(times);
+      setShowScheduleModal(true);
+    } catch (err) {
+      console.error("Erro ao buscar advogados:", err);
+    }
+  };
+
+  const handleScheduleConfirm = async (day: string, hour: string) => {
+    setShowScheduleModal(false);
 
     try {
       const res = await fetch("/api/create-ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: dbUser.id,
+          userId: dbUser?.id,
           text: question,
           area,
           summary,
           explanation,
           answerIA: answer,
           type: "ticket",
+          day,
+          hour,
         }),
       });
+
       const result = await res.json();
       if (!result.success) throw new Error(result.error);
+
       alert("Ticket criado com sucesso!");
     } catch (err) {
-      console.error("Erro ao criar ticket:", err);
+      console.error("Erro ao criar ticket com agendamento:", err);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden">
-      <NavBar />
-      <div className="absolute inset-0 opacity-20">
-        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400 rounded-full filter blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-400 rounded-full filter blur-3xl animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-purple-400 rounded-full filter blur-3xl animate-pulse"></div>
-      </div>
-
       <div className="relative z-10 min-h-screen flex flex-col pt-16">
         <div className="flex-1 px-4 py-8">
           <div className="max-w-4xl mx-auto text-center mb-12">
@@ -171,9 +194,8 @@ export default function LandingPage() {
                   </>
                 )}
               </button>
-
               <button
-                onClick={handleCTA}
+                onClick={() => router.push("/signup/regular")}
                 className="flex-1 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-semibold text-lg text-center border border-white/20 transition-all duration-300"
               >
                 Criar conta para Acesso Completo
@@ -199,7 +221,7 @@ export default function LandingPage() {
                   <ReactMarkdown>{answer}</ReactMarkdown>
                 </div>
                 <button
-                  onClick={handleCreateTicket}
+                  onClick={handleCreateTicketClick}
                   className="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl text-lg font-medium flex justify-center items-center space-x-2"
                 >
                   <Plus className="h-5 w-5" />
@@ -216,7 +238,7 @@ export default function LandingPage() {
         title="Créditos insuficientes"
         message={
           modalReason === "ia"
-            ? "Você usou todos os seus créditos de consulta com IA. Para continuar obtendo respostas instantâneas, adicione novos créditos ao seu plano."
+            ? "Você usou todos os seus créditos de consulta com IA."
             : "Você precisa de créditos de consultoria para transformar essa dúvida em ticket."
         }
         onClose={() => setShowCreditsModal(false)}
@@ -226,6 +248,13 @@ export default function LandingPage() {
         }}
         confirmText="Adicionar Créditos"
         cancelText="Fechar"
+      />
+
+      <ScheduleModal
+        open={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        onConfirm={handleScheduleConfirm}
+        availableTimes={availableTimes}
       />
 
       <style jsx global>{`

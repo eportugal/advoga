@@ -21,15 +21,22 @@ import {
 } from "@mui/material";
 import { CheckCircle, Eye, EyeOff } from "lucide-react";
 import ConfirmationCodeInput from "../components/ConfirmationCodeInput";
-import AlertModal from "../components/AlertModal";
+import AlertModal from "../components/modal/AlertModal";
 import confetti from "canvas-confetti";
 
 Amplify.configure(outputs);
 
 export default function AuthFlow() {
   const router = useRouter();
-  const { signUp, confirmSignUp, signIn, resendConfirmationCode, isLoading } =
-    useAuth();
+  const {
+    signUp,
+    confirmSignUp,
+    signIn,
+    resendConfirmationCode,
+    isLoading,
+    isAuthenticated,
+    profile,
+  } = useAuth();
   const [step, setStep] = useState<"login" | "signup" | "confirm">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,6 +64,18 @@ export default function AuthFlow() {
     }
   }, [showModal]);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (profile === "advogado") {
+        router.replace("/tickets/manage");
+      } else {
+        router.replace("/dashboard");
+      }
+    }
+  }, [isAuthenticated, profile]);
+
+  if (isAuthenticated) return null;
+
   const resetMessages = () => {
     setError("");
     setSuccess("");
@@ -71,12 +90,22 @@ export default function AuthFlow() {
     e.preventDefault();
     setLoginLoading(true);
     resetMessages();
+
     try {
       const signInRes = await signIn(email, password);
+
       if (!signInRes.success) throw new Error(signInRes.message);
+
+      const profile = signInRes.profile; // "regular" ou "advogado"
+
       setLoginSuccess(true);
+
       setTimeout(() => {
-        router.push("/");
+        if (profile === "advogado") {
+          router.push("/tickets/manage");
+        } else {
+          router.push("/dashboard");
+        }
       }, 1000);
     } catch (err: any) {
       setError(err.message || "Erro inesperado");
@@ -196,259 +225,261 @@ export default function AuthFlow() {
   };
 
   return (
-    <Container>
-      <Grid container spacing={4} className="justify-between py-8">
-        <Grid
-          size={6}
-          sx={{
-            backgroundColor: "primary.main",
-            color: "white",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            textAlign: "center",
-            px: 6,
-            py: 10,
-            minHeight: "80vh",
-            borderRadius: 4,
-          }}
-        >
-          <Typography variant="h4" fontWeight={700} gutterBottom>
-            Comece sua jornada com a gente.
-          </Typography>
-          <Typography variant="body1" sx={{ maxWidth: 400, mb: 6 }}>
-            Descubra a melhor comunidade de advogados e clientes para resolver
-            seus problemas jurídicos com confiança.
-          </Typography>
-          <Paper
-            elevation={6}
+    <div className="bg-gray-50">
+      <Container>
+        <Grid container spacing={4} className="justify-between py-8">
+          <Grid
+            size={6}
             sx={{
-              backgroundColor: "rgba(255, 255, 255, 0.1)",
-              p: 3,
-              borderRadius: 3,
-              maxWidth: 360,
+              backgroundColor: "primary.main",
               color: "white",
-              backdropFilter: "blur(5px)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              textAlign: "center",
+              px: 6,
+              py: 10,
+              minHeight: "80vh",
+              borderRadius: 4,
             }}
           >
-            <Typography variant="body2" sx={{ fontStyle: "italic", mb: 2 }}>
-              “Simplesmente incrível! Consegui resolver meu problema jurídico
-              muito rápido. Recomendo demais.”
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Comece sua jornada com a gente.
             </Typography>
-            <Typography variant="caption" display="block" fontWeight={600}>
-              João Silva – Cliente
+            <Typography variant="body1" sx={{ maxWidth: 400, mb: 6 }}>
+              Descubra a melhor comunidade de advogados e clientes para resolver
+              seus problemas jurídicos com confiança.
             </Typography>
-          </Paper>
-        </Grid>
-
-        <Grid size={6} className="min-h-[80vh]">
-          <Paper
-            className="bg-white shadow-md px-8 min-h-[80vh] flex flex-col items-center justify-center"
-            sx={{ borderRadius: 4 }}
-          >
-            <Box textAlign="center">
-              <Typography
-                variant="h5"
-                fontWeight={700}
-                gutterBottom
-                align="center"
-              >
-                {step === "login"
-                  ? "Entrar"
-                  : step === "signup"
-                  ? "Criar Conta"
-                  : "Confirmar Código"}
+            <Paper
+              elevation={6}
+              sx={{
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                p: 3,
+                borderRadius: 3,
+                maxWidth: 360,
+                color: "white",
+                backdropFilter: "blur(5px)",
+              }}
+            >
+              <Typography variant="body2" sx={{ fontStyle: "italic", mb: 2 }}>
+                “Simplesmente incrível! Consegui resolver meu problema jurídico
+                muito rápido. Recomendo demais.”
               </Typography>
-            </Box>
+              <Typography variant="caption" display="block" fontWeight={600}>
+                João Silva – Cliente
+              </Typography>
+            </Paper>
+          </Grid>
 
-            {step === "login" && (
-              <Box
-                component="form"
-                onSubmit={handleLogin}
-                className="mt-4 space-y-4"
-              >
-                <TextField
-                  fullWidth
-                  label="Email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Senha"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  InputProps={{
-                    endAdornment: (
-                      <IconButton
-                        onClick={() => setShowPassword(!showPassword)}
-                        edge="end"
-                      >
-                        {showPassword ? (
-                          <EyeOff size={20} />
-                        ) : (
-                          <Eye size={20} />
-                        )}
-                      </IconButton>
-                    ),
-                  }}
-                />
-                <Button
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  disabled={loginLoading || loginSuccess}
-                  startIcon={
-                    loginSuccess ? (
-                      <CheckCircle size={20} />
-                    ) : loginLoading ? (
-                      <CircularProgress size={20} color="inherit" />
-                    ) : undefined
-                  }
-                >
-                  {loginSuccess
-                    ? "Logado com sucesso!"
-                    : loginLoading
-                    ? "Entrando..."
-                    : "Entrar"}
-                </Button>
+          <Grid size={6} className="min-h-[80vh]">
+            <Paper
+              className="bg-white shadow-md px-8 min-h-[80vh] flex flex-col items-center justify-center"
+              sx={{ borderRadius: 4 }}
+            >
+              <Box textAlign="center">
                 <Typography
+                  variant="h5"
+                  fontWeight={700}
+                  gutterBottom
                   align="center"
-                  fontSize={12}
-                  className="text-gray-500"
                 >
-                  Não tem uma conta?{" "}
-                  <Link component="button" onClick={() => setStep("signup")}>
-                    Criar uma
-                  </Link>
+                  {step === "login"
+                    ? "Entrar"
+                    : step === "signup"
+                    ? "Criar Conta"
+                    : "Confirmar Código"}
                 </Typography>
               </Box>
-            )}
 
-            {step === "signup" && (
-              <Box
-                component="form"
-                onSubmit={handleSignUp}
-                noValidate
-                className="mt-4 space-y-4"
-              >
-                <TextField
-                  fullWidth
-                  label="Nome"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Sobrenome"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Senha"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  InputProps={{
-                    endAdornment: (
-                      <IconButton
-                        onClick={() => setShowPassword(!showPassword)}
-                        edge="end"
-                      >
-                        {showPassword ? (
-                          <EyeOff size={20} />
-                        ) : (
-                          <Eye size={20} />
-                        )}
-                      </IconButton>
-                    ),
-                  }}
-                />
-                <Button
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  disabled={loading}
+              {step === "login" && (
+                <Box
+                  component="form"
+                  onSubmit={handleLogin}
+                  className="mt-4 space-y-4"
                 >
-                  {loading ? "Criando..." : "Criar Conta"}
-                </Button>
-                <Typography align="center">
-                  Já tem uma conta?{" "}
-                  <Link component="button" onClick={() => setStep("login")}>
-                    Entrar
-                  </Link>
-                </Typography>
-              </Box>
-            )}
+                  <TextField
+                    fullWidth
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Senha"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    InputProps={{
+                      endAdornment: (
+                        <IconButton
+                          onClick={() => setShowPassword(!showPassword)}
+                          edge="end"
+                        >
+                          {showPassword ? (
+                            <EyeOff size={20} />
+                          ) : (
+                            <Eye size={20} />
+                          )}
+                        </IconButton>
+                      ),
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={loginLoading || loginSuccess}
+                    startIcon={
+                      loginSuccess ? (
+                        <CheckCircle size={20} />
+                      ) : loginLoading ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : undefined
+                    }
+                  >
+                    {loginSuccess
+                      ? "Logado com sucesso!"
+                      : loginLoading
+                      ? "Entrando..."
+                      : "Entrar"}
+                  </Button>
+                  <Typography
+                    align="center"
+                    fontSize={12}
+                    className="text-gray-500"
+                  >
+                    Não tem uma conta?{" "}
+                    <Link component="button" onClick={() => setStep("signup")}>
+                      Criar uma
+                    </Link>
+                  </Typography>
+                </Box>
+              )}
 
-            {step === "confirm" && (
-              <Box component="form" onSubmit={handleConfirm}>
-                <ConfirmationCodeInput
-                  confirmationCode={confirmationCode}
-                  setConfirmationCode={setConfirmationCode}
-                  onResend={resendCode}
-                  loading={loading}
-                  email={email}
-                />
-                <Button
-                  className="mt-8"
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  disabled={confirmLoading || confirmSuccess}
-                  startIcon={
-                    confirmSuccess ? (
-                      <CheckCircle size={20} />
-                    ) : confirmLoading ? (
-                      <CircularProgress size={20} color="inherit" />
-                    ) : undefined
-                  }
+              {step === "signup" && (
+                <Box
+                  component="form"
+                  onSubmit={handleSignUp}
+                  noValidate
+                  className="mt-4 space-y-4"
                 >
-                  {confirmSuccess
-                    ? "Confirmado!"
-                    : confirmLoading
-                    ? "Confirmando..."
-                    : "Confirmar e Entrar"}
-                </Button>
-              </Box>
-            )}
+                  <TextField
+                    fullWidth
+                    label="Nome"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Sobrenome"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Senha"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    InputProps={{
+                      endAdornment: (
+                        <IconButton
+                          onClick={() => setShowPassword(!showPassword)}
+                          edge="end"
+                        >
+                          {showPassword ? (
+                            <EyeOff size={20} />
+                          ) : (
+                            <Eye size={20} />
+                          )}
+                        </IconButton>
+                      ),
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={loading}
+                  >
+                    {loading ? "Criando..." : "Criar Conta"}
+                  </Button>
+                  <Typography align="center">
+                    Já tem uma conta?{" "}
+                    <Link component="button" onClick={() => setStep("login")}>
+                      Entrar
+                    </Link>
+                  </Typography>
+                </Box>
+              )}
 
-            {error && (
-              <Alert severity="error" className="mt-6">
-                {error}
-              </Alert>
-            )}
-            {success && (
-              <Alert severity="success" className="mt-6">
-                {success}
-              </Alert>
-            )}
-          </Paper>
+              {step === "confirm" && (
+                <Box component="form" onSubmit={handleConfirm}>
+                  <ConfirmationCodeInput
+                    confirmationCode={confirmationCode}
+                    setConfirmationCode={setConfirmationCode}
+                    onResend={resendCode}
+                    loading={loading}
+                    email={email}
+                  />
+                  <Button
+                    className="mt-8"
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={confirmLoading || confirmSuccess}
+                    startIcon={
+                      confirmSuccess ? (
+                        <CheckCircle size={20} />
+                      ) : confirmLoading ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : undefined
+                    }
+                  >
+                    {confirmSuccess
+                      ? "Confirmado!"
+                      : confirmLoading
+                      ? "Confirmando..."
+                      : "Confirmar e Entrar"}
+                  </Button>
+                </Box>
+              )}
+
+              {error && (
+                <Alert severity="error" className="mt-6">
+                  {error}
+                </Alert>
+              )}
+              {success && (
+                <Alert severity="success" className="mt-6">
+                  {success}
+                </Alert>
+              )}
+            </Paper>
+          </Grid>
         </Grid>
-      </Grid>
 
-      <AlertModal
-        open={showModal}
-        loading={loginLoading}
-        onConfirm={finalizeLogin}
-      />
-    </Container>
+        <AlertModal
+          open={showModal}
+          loading={loginLoading}
+          onConfirm={finalizeLogin}
+        />
+      </Container>
+    </div>
   );
 }

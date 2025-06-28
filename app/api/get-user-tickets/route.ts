@@ -17,9 +17,59 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
+    const ticketId = searchParams.get("ticketId");
     const limit = Number(searchParams.get("limit") || "20");
     const lastKey = searchParams.get("lastKey");
 
+    // ✅ Buscar apenas 1 ticket por ID
+    if (ticketId) {
+      const res = await client.send(
+        new GetItemCommand({
+          TableName: "tickets",
+          Key: { ticketId: { S: ticketId } },
+        })
+      );
+
+      if (!res.Item) {
+        return NextResponse.json({
+          success: false,
+          error: "Ticket não encontrado",
+        });
+      }
+
+      let lawyerName = null;
+      const item = res.Item;
+
+      if (item.lawyerId?.S) {
+        const lawyerRes = await client.send(
+          new GetItemCommand({
+            TableName: "users",
+            Key: { id: { S: item.lawyerId.S } },
+          })
+        );
+
+        if (lawyerRes.Item) {
+          lawyerName = `${lawyerRes.Item.firstName?.S ?? ""} ${
+            lawyerRes.Item.lastName?.S ?? ""
+          }`.trim();
+        }
+      }
+
+      const ticket = {
+        ticketId: item.ticketId?.S ?? null,
+        userId: item.userId?.S ?? null,
+        text: item.text?.S ?? "",
+        status: item.status?.S ?? "Novo",
+        createdAt: item.createdAt?.S ?? null,
+        reply: item.reply?.S ?? null,
+        respondedAt: item.respondedAt?.S ?? null,
+        lawyerName: lawyerName || null,
+      };
+
+      return NextResponse.json({ success: true, ticket });
+    }
+
+    // ✅ Buscar por usuário (com paginação)
     if (!userId) {
       return NextResponse.json(
         { success: false, error: "userId é obrigatório na query string." },
@@ -34,7 +84,7 @@ export async function GET(req: NextRequest) {
       ExpressionAttributeValues: {
         ":uid": { S: userId },
       },
-      ScanIndexForward: false, // Mais recentes primeiro!
+      ScanIndexForward: false,
       Limit: limit,
     };
 
@@ -47,7 +97,6 @@ export async function GET(req: NextRequest) {
 
     const res = await client.send(new QueryCommand(input));
 
-    // ✅ Monta cada ticket com lookup do lawyerName se existir
     const tickets = await Promise.all(
       (res.Items || []).map(async (item) => {
         let lawyerName = null;
@@ -75,7 +124,7 @@ export async function GET(req: NextRequest) {
           createdAt: item.createdAt?.S ?? null,
           reply: item.reply?.S ?? null,
           respondedAt: item.respondedAt?.S ?? null,
-          lawyerName: lawyerName || null, // ✅ incluído!
+          lawyerName: lawyerName || null,
         };
       })
     );

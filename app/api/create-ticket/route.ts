@@ -4,7 +4,7 @@ import {
   UpdateItemCommand,
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
-import { decreaseCredit } from "../../utils/decreaseCredit"; // 👈 Reaproveita helper
+import { decreaseCredit } from "../../utils/decreaseCredit";
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION,
@@ -24,17 +24,97 @@ export async function POST(req: NextRequest) {
       explanation,
       answerIA,
       type = "ticket",
+      day,
+      hour,
     } = await req.json();
 
     console.log("📥 [create-ticket] Dados recebidos:");
-    console.log({ userId, text, area, summary, explanation, answerIA });
+    console.log({
+      userId,
+      text,
+      area,
+      summary,
+      explanation,
+      answerIA,
+      day,
+      hour,
+    });
 
-    if (!userId || !text?.trim() || !area || !summary || !explanation) {
+    if (
+      !userId ||
+      !text?.trim() ||
+      !area ||
+      !summary ||
+      !explanation ||
+      !day ||
+      !hour
+    ) {
       return NextResponse.json(
         { success: false, error: "Faltando campos obrigatórios" },
         { status: 400 }
       );
     }
+
+    // 🔍 Buscar advogados disponíveis para a área
+    const lawyerRes = await fetch(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/api/get-available-lawyers`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ area }),
+      }
+    );
+    const { lawyers } = await lawyerRes.json();
+
+    if (!lawyers || lawyers.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Nenhum advogado disponível para essa área." },
+        { status: 404 }
+      );
+    }
+
+    // 🧠 Filtrar advogados com o horário escolhido
+    const availableLawyers = lawyers.filter((lawyer: any) =>
+      lawyer.availability?.[day]?.includes(hour)
+    );
+
+    if (availableLawyers.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Nenhum advogado disponível nesse horário." },
+        { status: 404 }
+      );
+    }
+
+    // 🎯 Escolher advogado aleatoriamente
+    const randomLawyer =
+      availableLawyers[Math.floor(Math.random() * availableLawyers.length)];
+
+    // 📆 Criar appointment com o advogado e cliente
+    const appointmentRes = await fetch(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/api/create-appointment`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lawyerId: randomLawyer.id,
+          clientId: userId,
+          lawyerName: randomLawyer.name,
+          date: day,
+          time: hour,
+        }),
+      }
+    );
+
+    const appointmentData = await appointmentRes.json();
+
+    if (!appointmentData.success) {
+      return NextResponse.json(
+        { success: false, error: "Erro ao criar a reunião." },
+        { status: 500 }
+      );
+    }
+
+    const { appointmentId, jitsiLink } = appointmentData;
 
     // 🔢 Gera ID incremental
     const counter = await client.send(
@@ -57,13 +137,18 @@ export async function POST(req: NextRequest) {
     const ticketItem: Record<string, any> = {
       ticketId: { S: newId },
       userId: { S: userId },
+      lawyerId: { S: randomLawyer.id },
       text: { S: text.trim() },
       area: { S: area },
       summary: { S: summary },
       explanation: { S: explanation },
       type: { S: type },
       status: { S: "Novo" },
+      day: { S: day },
+      hour: { S: hour },
       createdAt: { S: new Date().toISOString() },
+      appointmentId: { S: appointmentId },
+      jitsiLink: { S: jitsiLink },
     };
 
     if (answerIA) {
@@ -90,6 +175,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       id: newId,
+      lawyerId: randomLawyer.id,
+      lawyerName: randomLawyer.name,
+      jitsiLink,
+      appointmentId,
       message: "Ticket criado com sucesso",
     });
   } catch (err: any) {

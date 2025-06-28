@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../../hooks/useAuth";
 import { Scale, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -15,6 +15,8 @@ export default function NavBar() {
     await signOut();
     router.push("/");
   };
+
+  if (isAuthenticated && profile === "regular") return null;
 
   return (
     <Box

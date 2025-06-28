@@ -29,7 +29,7 @@ import { Theme, useTheme } from "@mui/material/styles";
 import type { SelectChangeEvent } from "@mui/material/Select";
 import ConfirmationCodeInput from "../../components/ConfirmationCodeInput";
 import { CheckCircle, Eye, EyeOff, ArrowLeft } from "lucide-react";
-import AlertModal from "../../components/AlertModal";
+import AlertModal from "../../components/modal/AlertModal";
 import confetti from "canvas-confetti";
 
 Amplify.configure(outputs);
@@ -44,12 +44,10 @@ export default function SignUpFlowLawyer() {
     isLoading,
     resendConfirmationCode,
   } = useAuth();
-
   const [signupStep, setSignupStep] = useState<"basic" | "professional">(
     "basic"
   );
   const [step, setStep] = useState<"signup" | "confirm">("signup");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -213,6 +211,21 @@ export default function SignUpFlowLawyer() {
       const dbData = await dbRes.json();
       if (!dbData.success) throw new Error(dbData.error);
 
+      await fetch("/api/set-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lawyerId: dbData.id,
+          weeklySchedule: {
+            monday: availability.monday || [],
+            tuesday: availability.tuesday || [],
+            wednesday: availability.wednesday || [],
+            thursday: availability.thursday || [],
+            friday: availability.friday || [],
+          },
+        }),
+      });
+
       setUserId(dbData.id);
 
       const res = await signUp(
@@ -355,12 +368,20 @@ export default function SignUpFlowLawyer() {
     setSuccess("");
   };
 
+  const [availability, setAvailability] = useState<Record<string, string[]>>({
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+  });
+
   return (
     <Container>
       <Grid container spacing={4} className="justify-between py-8">
         <Grid size={6} className="min-h-[80vh]">
           <Paper
-            className="bg-white shadow-md px-8 min-h-[80vh] flex flex-col items-center justify-center"
+            className="bg-white shadow-md p-8 min-h-[80vh] flex flex-col items-center justify-center"
             sx={{
               borderRadius: 4,
             }}
@@ -562,6 +583,102 @@ export default function SignUpFlowLawyer() {
                         ))}
                       </Select>
                     </FormControl>
+
+                    <Box mt={3}>
+                      <Typography variant="subtitle1" fontWeight={500}>
+                        Horários de Atendimento
+                      </Typography>
+
+                      {/** Mapeamento em português */}
+                      {(() => {
+                        const dayLabels: Record<string, string> = {
+                          monday: "Segunda-feira",
+                          tuesday: "Terça-feira",
+                          wednesday: "Quarta-feira",
+                          thursday: "Quinta-feira",
+                          friday: "Sexta-feira",
+                        };
+
+                        const hourOptions = [
+                          "08:00",
+                          "09:00",
+                          "10:00",
+                          "11:00",
+                          "12:00",
+                          "13:00",
+                          "14:00",
+                          "15:00",
+                          "16:00",
+                          "17:00",
+                          "18:00",
+                        ];
+
+                        return Object.keys(availability).map((day) => (
+                          <Box
+                            key={day}
+                            display="flex"
+                            alignItems="center"
+                            gap={2}
+                            mt={2}
+                          >
+                            <Typography sx={{ width: 140 }}>
+                              {dayLabels[day] || day}
+                            </Typography>
+                            <FormControl fullWidth>
+                              <InputLabel id={`${day}-hours-label`}>
+                                Horários
+                              </InputLabel>
+                              <Select
+                                labelId={`${day}-hours-label`}
+                                multiple
+                                value={availability[day]}
+                                onChange={(e) =>
+                                  setAvailability((prev) => ({
+                                    ...prev,
+                                    [day]:
+                                      typeof e.target.value === "string"
+                                        ? e.target.value.split(",")
+                                        : e.target.value,
+                                  }))
+                                }
+                                input={<OutlinedInput label="Horários" />}
+                                renderValue={(selected) => (
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: 0.5,
+                                    }}
+                                  >
+                                    {selected.map((hour) => (
+                                      <Chip
+                                        key={hour}
+                                        label={hour}
+                                        onDelete={() =>
+                                          setAvailability((prev) => ({
+                                            ...prev,
+                                            [day]: prev[day].filter(
+                                              (h) => h !== hour
+                                            ),
+                                          }))
+                                        }
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                      />
+                                    ))}
+                                  </Box>
+                                )}
+                              >
+                                {hourOptions.map((hour) => (
+                                  <MenuItem key={hour} value={hour}>
+                                    {hour}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </Box>
+                        ));
+                      })()}
+                    </Box>
 
                     <Button
                       type="submit"

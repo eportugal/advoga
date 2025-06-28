@@ -1,21 +1,21 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import TicketModal from "../../components/TicketModal";
-
-type Ticket = {
-  ticketId: string;
-  user: {
-    name: string;
-    email: string;
-  } | null;
-  subject: string;
-  text: string;
-  status: string;
-  createdAt: string;
-};
+import type { Ticket } from "@/app/types/Ticket";
+import {
+  Button,
+  Chip,
+  Select,
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Skeleton,
+  FormControl,
+  MenuItem,
+} from "@mui/material";
 
 function timeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -34,24 +34,48 @@ function timeAgo(dateString: string) {
 
 export default function TicketsManagePage() {
   const router = useRouter();
-  const { isAuthenticated, profile } = useAuth();
+  const { isAuthenticated, profile, user } = useAuth();
+  const [dbUserId, setDbUserId] = useState<string | null>(null);
   const [lastKey, setLastKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showReplyField, setShowReplyField] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [practiceAreas, setPracticeAreas] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const ticketsStatus = ["Novo", "Em Aberto", "Fechado"];
+
+  useEffect(() => {
+    const loadDbUser = async () => {
+      if (!user) return;
+      const email = user.signInDetails?.loginId;
+      if (!email) return;
+
+      const res = await fetch("/api/get-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setDbUserId(data.user.id);
+        setPracticeAreas(data.user.practiceAreas || []);
+      }
+    };
+
+    loadDbUser();
+  }, [user]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     if (profile !== "advogado") {
       router.replace("/");
-    } else {
+    } else if (practiceAreas.length > 0) {
       loadTickets(true);
     }
-  }, [isAuthenticated, profile, router]);
+  }, [isAuthenticated, profile, practiceAreas, statusFilter]);
 
   const loadTickets = async (initial = false) => {
     if (initial) {
@@ -63,8 +87,19 @@ export default function TicketsManagePage() {
 
     try {
       const params = new URLSearchParams();
-      params.set("limit", "5");
+      params.set("limit", "20");
+
       if (!initial && lastKey) params.set("lastKey", lastKey);
+
+      // Adiciona filtros de áreas
+      practiceAreas.forEach((area) => {
+        params.append("area", area);
+      });
+
+      // ✅ Adiciona o filtro de status se estiver definido
+      if (statusFilter) {
+        params.set("status", statusFilter);
+      }
 
       const res = await fetch(`/api/get-tickets?${params.toString()}`);
       const data = await res.json();
@@ -90,6 +125,11 @@ export default function TicketsManagePage() {
       return;
     }
 
+    if (!dbUserId) {
+      alert("Informações do advogado não encontradas.");
+      return;
+    }
+
     try {
       const res = await fetch("/api/respond-ticket", {
         method: "POST",
@@ -97,6 +137,7 @@ export default function TicketsManagePage() {
         body: JSON.stringify({
           ticketId: selectedTicket?.ticketId,
           reply: replyText,
+          lawyerId: dbUserId,
         }),
       });
 
@@ -106,7 +147,7 @@ export default function TicketsManagePage() {
         setReplyText("");
         setShowReplyField(false);
       } else {
-        alert("Falha ao enviar resposta.");
+        alert(data.error || "Falha ao enviar resposta.");
       }
     } catch (err) {
       console.error(err);
@@ -145,77 +186,212 @@ export default function TicketsManagePage() {
   };
 
   return (
-    <div className="bg-gray-50">
-      <div className="flex h-screen mt-16 max-w-7xl mx-auto px-4">
-        <main className="flex-1 h-full overflow-y-auto p-8">
-          <h1 className="text-2xl font-bold mb-6 text-gray-800">
-            Novos tickets
-          </h1>
+    <Box className="bg-gray-50 mt-16">
+      <Container maxWidth="lg" className="flex px-4">
+        <main className="flex-1 overflow-y-auto py-8">
+          <Typography
+            marginBottom={2}
+            variant="h5"
+            className="font-bold text-gray-800"
+          >
+            Consultorias
+          </Typography>
+          <Box className="mb-4 flex gap-4 items-center">
+            <Typography className="text-sm text-slate-600">
+              Filtrar por status:
+            </Typography>
+            <FormControl size="small">
+              <Select
+                value={statusFilter ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setStatusFilter(value ? value : null); // null representa "Todos"
+                }}
+                displayEmpty
+                sx={{ minWidth: 150 }}
+              >
+                <MenuItem value="">Todos</MenuItem>
+                {ticketsStatus.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
 
-          <div className="space-y-6">
+          <Box className="space-y-6">
             {isInitialLoading && (
-              <div className="text-gray-500 text-center">
-                Carregando tickets...
-              </div>
+              <>
+                {[...Array(3)].map((_, i) => (
+                  <Paper
+                    key={i}
+                    className="border p-4 border-gray-200 hover:shadow transition"
+                  >
+                    <Box className="mb-2 flex justify-between gap-2">
+                      <Box width="88%">
+                        <Box className="flex">
+                          <Skeleton variant="text" width="10%" height={20} />
+                          <Skeleton
+                            className="ml-2"
+                            variant="text"
+                            width="15%"
+                            height={20}
+                          />
+                          <Skeleton
+                            className="ml-2"
+                            variant="text"
+                            width="20%"
+                            height={20}
+                          />
+                        </Box>
+                        <Skeleton variant="text" width="30%" height={20} />
+                        <Skeleton variant="text" width="100%" height={20} />
+                        <Skeleton variant="text" width="40%" height={20} />
+                      </Box>
+                      <Skeleton variant="rounded" width={98} height={40} />
+                    </Box>
+                  </Paper>
+                ))}
+              </>
             )}
 
             {!isInitialLoading && tickets.length === 0 && (
-              <div className="text-gray-500 text-center">
+              <Typography className="text-gray-500 text-center">
                 Nenhum ticket encontrado.
-              </div>
+              </Typography>
             )}
 
-            {tickets.map((ticket) => (
-              <div
+            {tickets.map((ticket, index) => (
+              <Paper
                 key={ticket.ticketId}
-                className="flex items-start justify-between bg-white p-4 rounded border border-gray-200 hover:shadow transition"
+                className="relative overflow-hidden rounded-3xl p-8 shadow-2xl transition-all duration-500 ease-out hover:shadow-3xl bg-white/95 backdrop-blur-xl border border-white/30"
+                style={{
+                  background: "rgba(255, 255, 255, 0.95)",
+                }}
               >
-                <div>
-                  <div className="flex items-center text-xs text-gray-500 mb-1">
-                    <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded mr-2">
-                      {ticket.status}
-                    </span>
-                    <span>{timeAgo(ticket.createdAt)}</span>
-                    <span className="text-green-600 ml-2">
-                      {ticket.user?.email}
-                    </span>
-                  </div>
+                {/* Barra colorida animada no topo - só para status 'Novo' */}
+                {ticket.status === "Novo" && (
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4, #10b981, #f59e0b)",
+                      backgroundSize: "300% 100%",
+                    }}
+                  />
+                )}
 
-                  <div className="text-md font-bold text-green-700 mb-1">
-                    {ticket.subject}
-                  </div>
+                <Box className="flex justify-between gap-8">
+                  <Box className="flex-1">
+                    {/* Header com status e informações */}
+                    <Box className="flex items-center mb-6 gap-4 flex-wrap">
+                      <Chip
+                        label={ticket.status}
+                        size="small"
+                        className="text-white font-bold uppercase"
+                        sx={{
+                          backgroundColor:
+                            ticket.status === "Novo"
+                              ? "primary.main"
+                              : ticket.status === "Em Aberto"
+                              ? "warning.main"
+                              : "success.main", // Concluído
+                          color: "white",
+                          fontSize: "8px",
+                          letterSpacing: "1px",
+                          lineHeight: "1",
+                        }}
+                      />
 
-                  <div className="mt-1 text-sm text-gray-500 italic break-words">
-                    {ticket.text}
-                  </div>
+                      {/* Tag da área */}
+                      <Chip
+                        label={ticket.area || "Área não definida"}
+                        size="small"
+                        variant="outlined"
+                        className="font-bold uppercase"
+                        sx={{
+                          color: "primary.main",
+                          fontSize: "8px",
+                          letterSpacing: "1px",
+                          borderColor: "primary.main",
+                          lineHeight: "1",
+                        }}
+                      />
+                      <span className="text-slate-500 font-medium text-sm">
+                        {timeAgo(ticket.createdAt)}
+                      </span>
+                    </Box>
 
-                  <div className="text-sm text-gray-700">
-                    {ticket.user?.name}
-                  </div>
-                </div>
+                    {/* Descrição */}
+                    <Typography className="text-slate-600 text-base leading-relaxed mb-6">
+                      {ticket.summary}
+                    </Typography>
 
-                <button
-                  onClick={() => {
-                    setSelectedTicket(ticket);
-                    setReplyText("");
-                  }}
-                  className="bg-green-500 hover:bg-green-600 text-white text-xs px-4 py-2 rounded shadow-sm"
-                >
-                  Responder
-                </button>
-              </div>
+                    {/* Informações do cliente */}
+                    <div className="flex items-center gap-4 pt-6 border-t-2 border-dashed border-slate-200 mt-8">
+                      {/* Avatar com iniciais */}
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-400 text-white font-bold text-lg shadow-sm">
+                        <p className="text-sm">
+                          {ticket.user?.name
+                            ? ticket.user.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)
+                            : "UN"}
+                        </p>
+                      </div>
+                      <div className="flex flex-col">
+                        <Typography className="font-semibold text-slate-800">
+                          {ticket.user?.name || "Nome não disponível"}
+                        </Typography>
+                        <Typography
+                          className="text-slate-500 text-xs"
+                          sx={{
+                            fontSize: "12px",
+                          }}
+                        >
+                          {ticket.user?.email || "Email não disponível"}
+                        </Typography>
+                      </div>
+                    </div>
+                  </Box>
+
+                  {/* Botão responder */}
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => {
+                      setSelectedTicket(ticket);
+                      setReplyText("");
+                    }}
+                    className="relative overflow-hidden h-12"
+                  >
+                    Ver detalhes
+                  </Button>
+                </Box>
+              </Paper>
             ))}
 
             {lastKey && !isInitialLoading && (
-              <button
-                onClick={() => loadTickets(false)}
-                disabled={loading}
-                className="bg-green-500 hover:bg-green-600 mt-8 text-white text-xs px-4 py-2 rounded shadow-sm"
-              >
-                {loading ? "Carregando..." : "Ver mais"}
-              </button>
+              <Container className="flex justify-center items-center">
+                <Button
+                  onClick={() => loadTickets(false)}
+                  disabled={loading}
+                  variant="outlined"
+                  size="small"
+                  className="mt-8 text-xs h-10"
+                  sx={{
+                    color: "primary.main",
+                  }}
+                >
+                  {loading ? "Carregando..." : "Ver mais"}
+                </Button>
+              </Container>
             )}
-          </div>
+          </Box>
         </main>
 
         {selectedTicket && (
@@ -234,7 +410,7 @@ export default function TicketsManagePage() {
             onShowReplyField={() => setShowReplyField(true)}
           />
         )}
-      </div>
-    </div>
+      </Container>
+    </Box>
   );
 }

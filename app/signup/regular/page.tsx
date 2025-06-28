@@ -1,235 +1,259 @@
 "use client";
 
-import { useState } from "react";
-import { Amplify } from "aws-amplify";
-import outputs from "@/amplify_outputs.json";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../../hooks/useAuth"; // ✅ Hook público!
+import ReactMarkdown from "react-markdown";
+import { CheckCircle, Sparkles, Send, MessageCircle, Plus } from "lucide-react";
+import NavBar from "../components/navbar/NavBar";
+import ErrorModal from "../components/modal/ErrorModal";
+import ScheduleModal from "../components/modal/ScheduleModal";
 
-import { getCurrentUser, resendSignUpCode } from "aws-amplify/auth";
-Amplify.configure(outputs);
-
-export default function SignUpFlow() {
+export default function LandingPage() {
+  const { isAuthenticated, dbUser, isLoading } = useAuth();
   const router = useRouter();
-  const { signUp, confirmSignUp, signIn, resendConfirmationCode } = useAuth(); // ✅ Pega do contexto
 
-  const [step, setStep] = useState<"signup" | "confirm">("signup");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [confirmationCode, setConfirmationCode] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [summary, setSummary] = useState("");
+  const [area, setArea] = useState("");
+  const [explanation, setExplanation] = useState("");
+  const [ticketId, setTicketId] = useState<string | null>(null);
+  const [loadingAnswer, setLoadingAnswer] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [modalReason, setModalReason] = useState<"ia" | "ticket" | null>(null);
 
-  const resetMessages = () => {
-    setError("");
-    setSuccess("");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [lawyers, setLawyers] = useState([]);
+
+  const creditsIA = Number(dbUser?.creditsIA ?? 0);
+  const creditsConsultoria = Number(dbUser?.creditsConsultoria ?? 0);
+
+  const handleCTA = () => {
+    router.push("/signup/regular");
   };
 
-  // ✅ 1️⃣ Cria no banco + Cognito usando o contexto
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    resetMessages();
+  const handleSubmit = async () => {
+    if (!question.trim() || !dbUser?.id) return;
+
+    if (creditsIA <= 0) {
+      setModalReason("ia");
+      setShowCreditsModal(true);
+      return;
+    }
+
+    setLoadingAnswer(true);
+    setAnswer("");
+    setSummary("");
+    setArea("");
+    setExplanation("");
+    setTicketId(null);
+    setSuccess(false);
 
     try {
-      const cleanEmail = email.toLowerCase().trim();
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, userId: dbUser.id }),
+      });
 
-      // Cria no banco
-      const dbRes = await fetch("/api/create-user", {
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      setAnswer(data.answerIA);
+      setSummary(data.summary);
+      setExplanation(data.explanation);
+      setArea(data.area);
+      setTicketId(data.ticketId);
+      setSuccess(true);
+    } catch (err) {
+      console.error("Erro:", err);
+    } finally {
+      setLoadingAnswer(false);
+    }
+  };
+
+  const handleOpenScheduleModal = async () => {
+    if (creditsConsultoria <= 0) {
+      setModalReason("ticket");
+      setShowCreditsModal(true);
+      return;
+    }
+
+    if (!area) return;
+
+    try {
+      const res = await fetch("/api/get-available-lawyers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ area }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      setLawyers(data.lawyers);
+      setShowScheduleModal(true);
+    } catch (err) {
+      console.error("Erro ao buscar advogados:", err);
+    }
+  };
+
+  const handleConfirmSchedule = async (
+    lawyerId: string,
+    day: string,
+    hour: string
+  ) => {
+    if (!question || !summary || !area || !answer || !dbUser?.id) return;
+
+    try {
+      const res = await fetch("/api/create-ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: cleanEmail,
+          userId: dbUser.id,
+          text: question,
+          area,
+          summary,
+          explanation,
+          answerIA: answer,
+          type: "ticket",
+          lawyerId,
+          scheduleDay: day,
+          scheduleHour: hour,
         }),
       });
-
-      const dbData = await dbRes.json();
-
-      if (!dbRes.ok || !dbData.success) {
-        throw new Error(dbData.error || "Erro ao criar usuário no banco");
-      }
-
-      setUserId(dbData.id);
-
-      // Cria no Cognito via contexto
-      const signUpRes = await signUp(
-        cleanEmail,
-        password,
-        "regular",
-        firstName.trim(),
-        lastName.trim()
-      );
-
-      if (!signUpRes.success) {
-        throw new Error(signUpRes.message || "Erro no Cognito");
-      }
-
-      setSuccess("Código de confirmação enviado para seu email!");
-      setStep("confirm");
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Erro desconhecido");
-    } finally {
-      setLoading(false);
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error);
+      alert("Ticket criado com sucesso!");
+      setShowScheduleModal(false);
+    } catch (err) {
+      console.error("Erro ao criar ticket:", err);
     }
   };
 
-  // ✅ 2️⃣ Confirma + login + atualiza banco + contexto já atualizado
-  const handleConfirm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    resetMessages();
-
-    try {
-      const cleanEmail = email.toLowerCase().trim();
-
-      // Confirma via contexto
-      const confirmRes = await confirmSignUp(
-        cleanEmail,
-        confirmationCode.trim()
-      );
-      if (!confirmRes.success) {
-        throw new Error(confirmRes.message || "Erro ao confirmar");
-      }
-
-      // Login via contexto
-      const signInRes = await signIn(cleanEmail, password);
-      if (!signInRes.success) {
-        throw new Error(signInRes.message || "Erro no login");
-      }
-
-      // Atualiza banco
-      if (userId) {
-        const currentUser = await getCurrentUser();
-        await fetch("/api/update-user-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: userId,
-            status: "active",
-            cognitoSub: currentUser.userId,
-          }),
-        });
-      }
-
-      // Redireciona
-      router.push("/");
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Erro inesperado");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resendCode = async () => {
-    setLoading(true);
-    resetMessages();
-
-    try {
-      await resendConfirmationCode(email.toLowerCase().trim());
-      setSuccess("Novo código enviado!");
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Erro ao reenviar código");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isLoading || !dbUser) {
+    return null;
+  }
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-4 text-black text-center">
-        Criar Conta
-      </h2>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400 rounded-full filter blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-400 rounded-full filter blur-3xl animate-pulse"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-purple-400 rounded-full filter blur-3xl animate-pulse"></div>
+      </div>
 
-      {step === "signup" && (
-        <form onSubmit={handleSignUp} className="space-y-4">
-          <input
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Nome"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-          />
-          <input
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Sobrenome"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-          />
-          <input
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Senha"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition"
-          >
-            {loading ? "Criando..." : "Criar Conta"}
-          </button>
-        </form>
-      )}
+      <div className="relative z-10 min-h-screen flex flex-col pt-16">
+        <div className="flex-1 px-4 py-8">
+          
+                    <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl p-8 max-w-3xl mx-auto">
+                      <label className="text-lg font-semibold text-white mb-3 flex items-center">
+                        <MessageCircle className="h-5 w-5 mr-2 text-blue-300" />
+                        Qual é a sua dúvida jurídica?
+                      </label>
+                      <textarea
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                        placeholder="Descreva sua situação com detalhes..."
+                        className="w-full h-32 p-4 bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl focus:ring-2 focus:ring-blue-400 text-white placeholder-blue-200 text-lg resize-none"
+                      />
+          
+                      <div className="flex flex-col sm:flex-row gap-4 mt-6">
+                        <button
+                          onClick={handleSubmit}
+                          className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-xl flex items-center justify-center space-x-2"
+                        >
+                          {loadingAnswer ? (
+                            <>
+                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                              <span>Consultando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-5 w-5" />
+                              <span>Obter Ajuda Jurídica Agora</span>
+                            </>
+                          )}
+                        </button>
+          
+                        <button
+                          onClick={handleCTA}
+                          className="flex-1 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-semibold text-lg text-center border border-white/20 transition-all duration-300"
+                        >
+                          Criar conta para Acesso Completo
+                        </button>
+                      </div>
 
-      {step === "confirm" && (
-        <form onSubmit={handleConfirm} className="space-y-4">
-          <input
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="Código de Confirmação"
-            value={confirmationCode}
-            onChange={(e) => setConfirmationCode(e.target.value)}
-            required
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-md transition"
-          >
-            {loading ? "Confirmando..." : "Confirmar e Entrar"}
-          </button>
-          <button
-            type="button"
-            onClick={resendCode}
-            disabled={loading}
-            className="w-full text-sm text-blue-600 hover:underline"
-          >
-            Reenviar Código
-          </button>
-        </form>
-      )}
+          {success && answer && (
+            <div className="mt-8 bg-gradient-to-r from-emerald-500/20 to-blue-500/20 backdrop-blur-md border border-emerald-300/30 rounded-2xl p-6 animate-fade-in">
+               <div className="flex items-center mb-4">
+                                <div className="p-2 bg-emerald-500 rounded-xl mr-3">
+                                  <CheckCircle className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                  <h3 className="text-lg font-semibold text-white">
+                                    Resposta da IA
+                                  </h3>
+                                  <p className="text-emerald-200 text-sm">
+                                    Análise jurídica especializada
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-white/90 leading-relaxed">
+                                <ReactMarkdown>{answer}</ReactMarkdown>
+                              </div>
+              <button
+                onClick={handleOpenScheduleModal}
+                className="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl text-lg font-medium flex justify-center items-center space-x-2"
+              >
+                <Plus className="h-5 w-5" />
+                <span>Transformar em Ticket</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
-      {error && (
-        <p className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-200">
-          {error}
-        </p>
-      )}
+      <ErrorModal
+        open={showCreditsModal}
+        title="Créditos insuficientes"
+        message={
+          modalReason === "ia"
+            ? "Você usou todos os seus créditos de consulta com IA. Para continuar obtendo respostas instantâneas, adicione novos créditos ao seu plano."
+            : "Você precisa de créditos de consultoria para transformar essa dúvida em ticket."
+        }
+        onClose={() => setShowCreditsModal(false)}
+        onConfirm={() => {
+          setShowCreditsModal(false);
+          router.push("/signup/regular");
+        }}
+        confirmText="Adicionar Créditos"
+        cancelText="Fechar"
+      />
 
-      {success && (
-        <p className="mt-4 text-sm text-green-700 bg-green-50 p-3 rounded-md border border-green-200">
-          {success}
-        </p>
-      )}
+      <ScheduleModal
+        open={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        onConfirm={handleConfirmSchedule}
+        lawyers={lawyers}
+      />
+
+      <style jsx global>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

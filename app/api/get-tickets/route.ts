@@ -1,4 +1,3 @@
-// ✅ app/api/get-tickets/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import {
   DynamoDBClient,
@@ -17,20 +16,52 @@ const client = new DynamoDBClient({
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const limit = Number(searchParams.get("limit") || "10");
+    const limit = Number(searchParams.get("limit") || "20");
     const lastKey = searchParams.get("lastKey");
+    const rawAreas = searchParams.getAll("area");
+    const status = searchParams.get("status"); // ✅ novo filtro
+
+    if (!rawAreas.length) {
+      return NextResponse.json(
+        { success: false, error: "Nenhuma área de atuação informada." },
+        { status: 400 }
+      );
+    }
+
+    // 🔧 construir FilterExpression dinâmica com áreas e status
+    const areaFilters = rawAreas
+      .map((_, index) => `#area = :a${index}`)
+      .join(" OR ");
+
+    const expressionAttrValues: Record<string, any> = {
+      ":type": { S: "ticket" },
+    };
+
+    const expressionAttrNames: Record<string, string> = {
+      "#type": "type",
+      "#area": "area",
+    };
+
+    rawAreas.forEach((area, index) => {
+      expressionAttrValues[`:a${index}`] = { S: area };
+    });
+
+    let filterExpression = `(${areaFilters})`;
+
+    if (status) {
+      filterExpression += ` AND #status = :status`;
+      expressionAttrNames["#status"] = "status";
+      expressionAttrValues[":status"] = { S: status };
+    }
 
     const input: any = {
       TableName: "tickets",
-      IndexName: "type-createdAt-index", // seu GSI novo!
+      IndexName: "type-createdAt-index",
       KeyConditionExpression: "#type = :type",
-      ExpressionAttributeNames: {
-        "#type": "type",
-      },
-      ExpressionAttributeValues: {
-        ":type": { S: "ticket" },
-      },
-      ScanIndexForward: false, // mais recentes primeiro
+      FilterExpression: filterExpression,
+      ExpressionAttributeNames: expressionAttrNames,
+      ExpressionAttributeValues: expressionAttrValues,
+      ScanIndexForward: false,
       Limit: limit,
     };
 
@@ -41,19 +72,15 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    // 🔍 Busca tickets
     const res = await client.send(new QueryCommand(input));
-
     const userCache = new Map<string, any>();
 
     const tickets = await Promise.all(
       (res.Items || []).map(async (item) => {
         const userId = item.userId?.S;
-
         let user = null;
 
         if (userId) {
-          // ⚡️ Busca user 1x só
           if (userCache.has(userId)) {
             user = userCache.get(userId);
           } else {
@@ -81,12 +108,13 @@ export async function GET(req: NextRequest) {
           ticketId: item.ticketId?.S ?? null,
           userId: userId ?? null,
           user: user,
-          subject: item.subject?.S ?? "",
           text: item.text?.S ?? "",
           status: item.status?.S ?? "Novo",
           createdAt: item.createdAt?.S ?? null,
           reply: item.reply?.S ?? null,
           lawyerName: item.lawyerName?.S ?? null,
+          area: item.area?.S ?? null,
+          summary: item.summary?.S ?? null,
         };
       })
     );

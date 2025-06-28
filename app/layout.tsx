@@ -1,10 +1,7 @@
-// app/layout.tsx
-
 import "./globals.css";
-import "./utils/amplify-config"; // garante que configure é chamado 1x
+import "./utils/amplify-config";
 import { AuthProvider } from "./contexts/AuthProvider";
-import NavBar from "./components/NavBar";
-import Footer from "./components/Footer";
+import ClientLayout from "./ClientLayout";
 
 export default function RootLayout({
   children,
@@ -15,9 +12,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body>
         <AuthProvider>
-          <NavBar />
-          <main>{children}</main>
-          <Footer />
+          <ClientLayout>{children}</ClientLayout>
         </AuthProvider>
       </body>
     </html>

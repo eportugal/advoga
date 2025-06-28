@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
       lastName,
       email,
       role: roleFromClient,
+      creditsIA,
+      creditsConsultoria,
     } = await req.json();
 
     const TABLE_NAME = "users"; // ✅ Confirme o nome exato
@@ -101,6 +103,8 @@ export async function POST(req: NextRequest) {
         role: { S: role },
         createdAt: { S: new Date().toISOString() },
         updatedAt: { S: new Date().toISOString() },
+        creditsIA: { N: "3" },
+        creditsConsultoria: { N: "3" },
       },
       ConditionExpression: "attribute_not_exists(id)", // Garante ID único
     });
@@ -120,6 +124,8 @@ export async function POST(req: NextRequest) {
         lastName: lastName.trim(),
         email: cleanEmail,
         status: "pending",
+        creditsIA: creditsIA,
+        creditsConsultoria: creditsConsultoria,
       },
     });
   } catch (error: any) {

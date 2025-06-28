@@ -22,8 +22,9 @@ export interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   user: AuthUser | null;
-  dbUser: any | null; // ✅ Novo!
+  dbUser: any | null;
   profile: "regular" | "advogado" | null;
+  initialized: boolean;
   signUp: (...args: any[]) => Promise<any>;
   confirmSignUp: (...args: any[]) => Promise<any>;
   resendConfirmationCode: (...args: any[]) => Promise<any>;
@@ -32,7 +33,8 @@ export interface AuthContextType {
   currentSession: () => Promise<any>;
   signIn: (...args: any[]) => Promise<any>;
   signOut: () => Promise<any>;
-  refreshProfile: () => Promise<void>; // ✅ Novo!
+  refreshProfile: () => Promise<void>;
+  isAuthenticating: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(
@@ -45,56 +47,70 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 function useProvideAuth(): AuthContextType {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [dbUser, setDbUser] = useState<any | null>(null); // ✅ Novo!
+  const [dbUser, setDbUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<"regular" | "advogado" | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false); // 🔁 adicionar isso no seu hook principal
 
   useEffect(() => {
+    const checkAuthState = async () => {
+      setIsLoading(true);
+      try {
+        const session = await fetchAuthSession();
+        if (!session.tokens?.idToken) throw new Error("No token");
+
+        const currentUser = await getCurrentUser();
+        const profileTypeRaw =
+          session.tokens.idToken.payload["custom:profile_type"];
+        const validProfile =
+          profileTypeRaw === "regular" || profileTypeRaw === "advogado"
+            ? profileTypeRaw
+            : null;
+
+        if (!validProfile) throw new Error("Perfil inválido ou ausente");
+
+        setUser(currentUser);
+        setProfile(validProfile);
+        setIsAuthenticated(true);
+
+        const res = await fetch("/api/get-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: currentUser.signInDetails?.loginId,
+          }),
+        });
+        const data = await res.json();
+        setDbUser(data.success ? data.user : null);
+      } catch (err) {
+        console.log("[Auth] checkAuthState error", err);
+        setIsAuthenticated(false);
+        setUser(null);
+        setProfile(null);
+        setDbUser(null);
+      } finally {
+        setIsLoading(false);
+        setInitialized(true);
+      }
+    };
+
     checkAuthState();
   }, []);
 
-  const checkAuthState = async () => {
-    try {
-      const session = await fetchAuthSession();
-      if (session.tokens?.idToken) {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        const profileType =
-          session.tokens?.idToken?.payload["custom:profile_type"];
-        setProfile(profileType as "regular" | "advogado");
-        setIsAuthenticated(true);
+  const refreshProfile = async (emailOverride?: string) => {
+    const email = emailOverride || user?.signInDetails?.loginId;
+    if (!email) return;
 
-        // ✅ Já carrega info do banco só 1x:
-        await refreshProfile();
-      }
-    } catch {
-      setIsAuthenticated(false);
-      setUser(null);
-      setProfile(null);
-      setDbUser(null);
-    }
-  };
-
-  const refreshProfile = async () => {
-    try {
-      if (!user?.signInDetails?.loginId) return;
-      const res = await fetch("/api/get-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user.signInDetails.loginId }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setDbUser(data.user);
-      } else {
-        setDbUser(null);
-      }
-    } catch (err) {
-      console.error("[refreshProfile] Erro:", err);
-      setDbUser(null);
-    }
+    const res = await fetch("/api/get-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    setDbUser(data.success ? data.user : null);
   };
 
   const currentSession = async () => {
@@ -205,24 +221,35 @@ function useProvideAuth(): AuthContextType {
 
   const signIn = async (username: string, password: string) => {
     setIsLoading(true);
+    setIsAuthenticating(true); // 🛑 impede renderização prematura
     try {
       await amplifySignIn({ username: username.toLowerCase(), password });
       const session = await fetchAuthSession();
       const profileType =
         session.tokens?.idToken?.payload["custom:profile_type"];
+
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setProfile(profileType as "regular" | "advogado");
       setIsAuthenticated(true);
-
-      // ✅ Quando logar, atualiza banco também:
-      await refreshProfile();
+      await refreshProfile(currentUser.signInDetails?.loginId);
 
       return { success: true, profile: profileType };
     } catch (error: any) {
-      return { success: false, message: error.message };
+      let message = error.message || "Erro inesperado.";
+      if (message.includes("Incorrect username or password")) {
+        message = "E-mail ou senha incorretos.";
+      } else if (message.includes("User is not confirmed")) {
+        message = "Usuário ainda não confirmou o código.";
+      } else if (message.includes("User does not exist")) {
+        message = "Usuário não encontrado.";
+      } else if (message.includes("Password attempts exceeded")) {
+        message = "Muitas tentativas. Tente novamente mais tarde.";
+      }
+      return { success: false, message };
     } finally {
       setIsLoading(false);
+      setIsAuthenticating(false); // ✅ libera renderização
     }
   };
 
@@ -243,8 +270,9 @@ function useProvideAuth(): AuthContextType {
     isLoading,
     isAuthenticated,
     user,
-    dbUser, // ✅ Disponível para todos os componentes
+    dbUser,
     profile,
+    initialized,
     signUp,
     confirmSignUp,
     resendConfirmationCode,
@@ -253,6 +281,9 @@ function useProvideAuth(): AuthContextType {
     currentSession,
     signIn,
     signOut: handleSignOut,
-    refreshProfile, // ✅ exposto
+    refreshProfile,
+    isAuthenticating, // <-- aqui
   };
 }
+
+export { useProvideAuth };

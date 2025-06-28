@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  QueryCommand,
+  GetItemCommand,
+} from "@aws-sdk/client-dynamodb";
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION,
@@ -13,9 +17,59 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
-    const limit = Number(searchParams.get("limit") || "10");
+    const ticketId = searchParams.get("ticketId");
+    const limit = Number(searchParams.get("limit") || "20");
     const lastKey = searchParams.get("lastKey");
 
+    // ✅ Buscar apenas 1 ticket por ID
+    if (ticketId) {
+      const res = await client.send(
+        new GetItemCommand({
+          TableName: "tickets",
+          Key: { ticketId: { S: ticketId } },
+        })
+      );
+
+      if (!res.Item) {
+        return NextResponse.json({
+          success: false,
+          error: "Ticket não encontrado",
+        });
+      }
+
+      let lawyerName = null;
+      const item = res.Item;
+
+      if (item.lawyerId?.S) {
+        const lawyerRes = await client.send(
+          new GetItemCommand({
+            TableName: "users",
+            Key: { id: { S: item.lawyerId.S } },
+          })
+        );
+
+        if (lawyerRes.Item) {
+          lawyerName = `${lawyerRes.Item.firstName?.S ?? ""} ${
+            lawyerRes.Item.lastName?.S ?? ""
+          }`.trim();
+        }
+      }
+
+      const ticket = {
+        ticketId: item.ticketId?.S ?? null,
+        userId: item.userId?.S ?? null,
+        text: item.text?.S ?? "",
+        status: item.status?.S ?? "Novo",
+        createdAt: item.createdAt?.S ?? null,
+        reply: item.reply?.S ?? null,
+        respondedAt: item.respondedAt?.S ?? null,
+        lawyerName: lawyerName || null,
+      };
+
+      return NextResponse.json({ success: true, ticket });
+    }
+
+    // ✅ Buscar por usuário (com paginação)
     if (!userId) {
       return NextResponse.json(
         { success: false, error: "userId é obrigatório na query string." },
@@ -30,7 +84,7 @@ export async function GET(req: NextRequest) {
       ExpressionAttributeValues: {
         ":uid": { S: userId },
       },
-      ScanIndexForward: false, // Mais recentes primeiro!
+      ScanIndexForward: false,
       Limit: limit,
     };
 
@@ -43,16 +97,37 @@ export async function GET(req: NextRequest) {
 
     const res = await client.send(new QueryCommand(input));
 
-    const tickets =
-      res.Items?.map((item) => ({
-        ticketId: item.ticketId?.S ?? null,
-        userId: item.userId?.S ?? null,
-        subject: item.subject?.S ?? "",
-        text: item.text?.S ?? "",
-        status: item.status?.S ?? "Novo",
-        createdAt: item.createdAt?.S ?? null,
-        reply: item.reply?.S ?? null,
-      })) || [];
+    const tickets = await Promise.all(
+      (res.Items || []).map(async (item) => {
+        let lawyerName = null;
+
+        if (item.lawyerId?.S) {
+          const lawyerRes = await client.send(
+            new GetItemCommand({
+              TableName: "users",
+              Key: { id: { S: item.lawyerId.S } },
+            })
+          );
+
+          if (lawyerRes.Item) {
+            lawyerName = `${lawyerRes.Item.firstName?.S ?? ""} ${
+              lawyerRes.Item.lastName?.S ?? ""
+            }`.trim();
+          }
+        }
+
+        return {
+          ticketId: item.ticketId?.S ?? null,
+          userId: item.userId?.S ?? null,
+          text: item.text?.S ?? "",
+          status: item.status?.S ?? "Novo",
+          createdAt: item.createdAt?.S ?? null,
+          reply: item.reply?.S ?? null,
+          respondedAt: item.respondedAt?.S ?? null,
+          lawyerName: lawyerName || null,
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
